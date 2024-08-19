@@ -6,19 +6,20 @@ import (
 	"runtime"
 	"sort"
 	"strings"
-	"time"
 
 	log "github.com/sirupsen/logrus"
 )
 
 var g_Loggers map[string]*log.Logger = make(map[string]*log.Logger)
 
-// func init() {
-// 	g_Loggers = make(map[string]*log.Logger)
-// }
+func init() {
+	logger := log.New()
+	logger.SetLevel(log.InfoLevel)
+	g_Loggers["default"] = logger
+}
 
 func LoggerInit(level string, configs map[string]LogConfig) {
-	//log.SetFormatter(&MyFormatter{})
+	log.SetFormatter(&LoggerFormatter{})
 	//log.AddHook(FileLineHook{})
 	logLevel := log.InfoLevel
 
@@ -103,36 +104,52 @@ func CreateLogger(name string, conf LogConfig) *log.Logger {
 
 	logger := log.New()
 	logger.SetLevel(logLevel)
-	//logger.SetFormatter(&MyFormatter{})
+	logger.SetFormatter(&LoggerFormatter{name: name})
 	//logger.AddHook(FileLineHook{})
 	logger.SetReportCaller(true)
-	logger.SetFormatter(&log.TextFormatter{
-		CallerPrettyfier: func(f *runtime.Frame) (string, string) {
-			// 这里可以自定义包名和文件名的格式
-			//filename := filepath.Base(f.File)
-			funcName := f.Function
-			return funcName, ""
-		},
-		FullTimestamp: true,
-	})
+	// logger.SetFormatter(&log.TextFormatter{
+	// 	CallerPrettyfier: func(f *runtime.Frame) (string, string) {
+	// 		// 这里可以自定义包名和文件名的格式
+	// 		//filename := filepath.Base(f.File)
+	// 		funcName := f.Function
+	// 		return funcName, ""
+	// 	},
+	// 	FullTimestamp: true,
+	// })
 
 	return logger
 }
 
-// MyFormatter is a custom log formatter.
-type MyFormatter struct{}
+// LoggerFormatter is a custom log formatter.
+type LoggerFormatter struct {
+	name string
+}
 
 // Format formats the log entry.
-func (f *MyFormatter) Format(entry *log.Entry) ([]byte, error) {
+func (f *LoggerFormatter) Format(entry *log.Entry) ([]byte, error) {
 	var b bytes.Buffer
 
 	// Add the timestamp
-	b.WriteString(entry.Time.Format(time.RFC3339))
-	b.WriteString(" ")
+	b.WriteString("[")
+	b.WriteString(entry.Time.Format("2006-01-02T15:04:05"))
+	b.WriteString("] [")
 
 	// Add the log level
-	b.WriteString(entry.Level.String())
-	b.WriteString(" ")
+	b.WriteString(strings.ToUpper(entry.Level.String()))
+	b.WriteString("] ")
+
+	if f.name != "" {
+		b.WriteString("[")
+		b.WriteString(f.name)
+		b.WriteString("] ")
+	}
+
+	if entry.Caller != nil {
+		fnParts := strings.Split(entry.Caller.Function, "/")
+		fnName := fnParts[len(fnParts)-1]
+		b.WriteString(fnName)
+		b.WriteString(" ")
+	}
 
 	// Add the fields
 	for key, value := range entry.Data {
