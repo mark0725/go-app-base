@@ -58,14 +58,14 @@ func GetLogger(name string) *log.Logger {
 		return logger
 	}
 
-	if logger, exists := g_Loggers["default"]; exists {
-		return logger
-	}
+	// if logger, exists := g_Loggers["default"]; exists {
+	// 	return logger
+	// }
 
-	//only for test
 	logger := log.New()
 	logger.SetLevel(log.InfoLevel)
-	g_Loggers["default"] = logger
+	logger.SetFormatter(&LoggerFormatter{name: name})
+	g_Loggers[name] = logger
 
 	return logger
 }

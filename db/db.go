@@ -4,8 +4,10 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 
 	applog "github.com/mark0725/go-app-base/logger"
+	"github.com/mark0725/go-app-base/utils"
 
 	_ "github.com/go-sql-driver/mysql"
 	log "github.com/sirupsen/logrus"
@@ -161,4 +163,47 @@ func GetDBConn(name string) *sql.DB {
 	}
 
 	return nil
+}
+
+func DBQueryEnt[T any](db string, table string, where string, params map[string]interface{}) ([]*T, error) {
+	var kb T
+	fields, err := GetTableFieldIds(&kb)
+	if err != nil {
+		logger.Error("GetTableFieldIds fail: ", err)
+		return nil, err
+	}
+
+	whereSql := ""
+	if where != "" {
+		whereSql = " where " + where
+	}
+
+	sqlOld := "SELECT " + strings.Join(fields, ",") + " FROM  " + table + whereSql
+
+	sqlResult := QueryNamedParamsBuilder(sqlOld, params)
+	logger.Trace("query sql:", sqlResult.Sql)
+	logger.Trace("query params:", sqlResult.Params)
+
+	result, err := DBQuery(db, sqlResult.Sql, sqlResult.Params)
+	if err != nil {
+		logger.Error("DBQuery fail: ", err)
+		return nil, err
+	}
+
+	if len(result) == 0 {
+		logger.Error("DBQuery notfound: ")
+		return nil, nil
+	}
+
+	rows := utils.Map(result, func(map[string]interface{}) *T {
+		var kb T
+		if err := MapRowToStruct(result[0], &kb); err != nil {
+			logger.Error("MapRowToStruct fail: ", err)
+			return nil
+		}
+
+		return &kb
+	})
+
+	return rows, nil
 }

@@ -88,3 +88,28 @@ func GetTableFieldIds(s interface{}) ([]string, error) {
 
 	return fields, nil
 }
+
+func MapRowToStruct(data map[string]interface{}, result interface{}) error {
+	// 解析 result 的值和类型
+	val := reflect.ValueOf(result).Elem()
+	typ := val.Type()
+
+	for i := 0; i < val.NumField(); i++ {
+		// 获取字段的 structfield 和对应的 json tag
+		field := typ.Field(i)
+		tag := field.Tag.Get("field-id")
+
+		if tag != "" {
+			// 查找 map 中对应的 key
+			if value, ok := data[tag]; ok && value != nil {
+				// 设置值
+				fieldVal := val.Field(i)
+				if fieldVal.CanSet() {
+					fieldVal.Set(reflect.ValueOf(value))
+				}
+			}
+		}
+	}
+
+	return nil
+}
