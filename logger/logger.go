@@ -18,12 +18,12 @@ func init() {
 	g_Loggers["default"] = logger
 }
 
-func LoggerInit(level string, configs map[string]LogConfig) {
+func LoggerInit(config *LogConfig) {
 	log.SetFormatter(&LoggerFormatter{})
 	//log.AddHook(FileLineHook{})
 	logLevel := log.InfoLevel
 
-	if lvl, err := log.ParseLevel(level); err == nil {
+	if lvl, err := log.ParseLevel(config.Level); err == nil {
 		logLevel = lvl
 	}
 	log.SetLevel(logLevel)
@@ -39,7 +39,7 @@ func LoggerInit(level string, configs map[string]LogConfig) {
 	// 	FullTimestamp: true,
 	// })
 
-	initLoggers(level, configs)
+	initLoggers(config.Level, config.Loggers)
 
 	// if _, exists := g_Loggers["default"]; !exists {
 	// 	logger := CreateLogger("default", log.InfoLevel)
@@ -58,9 +58,13 @@ func GetLogger(name string) *log.Logger {
 		return logger
 	}
 
-	// if logger, exists := g_Loggers["default"]; exists {
-	// 	return logger
-	// }
+	if l, exists := g_Loggers["default"]; exists {
+		logger := log.New()
+		logger.SetLevel(l.GetLevel())
+		logger.SetFormatter(&LoggerFormatter{name: name})
+		g_Loggers[name] = logger
+		return logger
+	}
 
 	logger := log.New()
 	logger.SetLevel(log.InfoLevel)
@@ -70,13 +74,13 @@ func GetLogger(name string) *log.Logger {
 	return logger
 }
 
-func initLoggers(level string, logsConfig map[string]LogConfig) {
+func initLoggers(level string, logsConfig map[string]LoggerConfig) {
 
-	defaultLogConf := LogConfig{
+	defaultLogConf := LoggerConfig{
 		Level: level,
 	}
 
-	logger := CreateLogger("default", defaultLogConf)
+	logger := CreateLogger("default", &defaultLogConf)
 	g_Loggers["default"] = logger
 
 	keys := make([]string, 0, len(logsConfig))
@@ -86,15 +90,15 @@ func initLoggers(level string, logsConfig map[string]LogConfig) {
 	sort.Strings(keys) // 对键进行排序
 
 	for _, key := range keys {
-
-		logger := CreateLogger(key, logsConfig[key])
+		loggerConf := logsConfig[key]
+		logger := CreateLogger(key, &loggerConf)
 		g_Loggers[key] = logger
 
 		//fmt.Printf("Key: %s, Value: %s\n", key, appConfig.Logs[key].Level)
 	}
 }
 
-func CreateLogger(name string, conf LogConfig) *log.Logger {
+func CreateLogger(name string, conf *LoggerConfig) *log.Logger {
 
 	logLevel := log.InfoLevel
 
