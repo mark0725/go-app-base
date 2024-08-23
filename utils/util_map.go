@@ -30,7 +30,7 @@ func MapToStruct(m map[string]interface{}, s interface{}) error {
 	v := reflect.ValueOf(s).Elem()
 	t := v.Type()
 
-	// Check if s is a pointer to a struct
+	// Check if s is a pointer to a struct.
 	if t.Kind() != reflect.Struct {
 		return fmt.Errorf("s must be a pointer to a struct")
 	}
@@ -40,13 +40,13 @@ func MapToStruct(m map[string]interface{}, s interface{}) error {
 		tag := field.Tag.Get("json")
 		tagOptions := strings.Split(tag, ",")
 
-		// Determine the key in the map
+		// Determine the key in the map.
 		key := tagOptions[0]
 		if key == "" {
-			continue
+			key = field.Name // Fallback to field name if no tag is present.
 		}
 
-		// Set the struct field if the key exists in the map
+		// Set the struct field if the key exists in the map.
 		if val, ok := m[key]; ok {
 			fieldValue := v.Field(i)
 			if val == nil {
@@ -56,9 +56,10 @@ func MapToStruct(m map[string]interface{}, s interface{}) error {
 			if !fieldValue.CanSet() {
 				continue
 			}
+
 			val := reflect.ValueOf(val)
 
-			// Handle different field types
+			// Handle different field types.
 			switch fieldValue.Kind() {
 			case reflect.Ptr:
 				if val.Kind() == reflect.Map && fieldValue.Type().Elem().Kind() == reflect.Struct {
@@ -90,11 +91,27 @@ func MapToStruct(m map[string]interface{}, s interface{}) error {
 					continue
 					//return fmt.Errorf("expected slice for field %s type %s", field.Name, val.Kind())
 				}
-				slice := reflect.MakeSlice(fieldValue.Type(), val.Len(), val.Cap())
+				slice := reflect.MakeSlice(fieldValue.Type(), val.Len(), val.Len())
 				for j := 0; j < val.Len(); j++ {
-					elem := reflect.New(fieldValue.Type().Elem()).Elem()
-					elem.Set(val.Index(j).Convert(fieldValue.Type().Elem()))
-					slice.Index(j).Set(elem)
+					elem := slice.Index(j)
+
+					if elem.Kind() == reflect.Ptr {
+						elem = reflect.New(fieldValue.Type().Elem().Elem())
+						slice.Index(j).Set(elem)
+						elem = elem.Elem()
+					}
+
+					if elem.Kind() == reflect.Struct && val.Index(j).Kind() == reflect.Map {
+						err := MapToStruct(val.Index(j).Interface().(map[string]interface{}), elem.Addr().Interface())
+						if err != nil {
+							return err
+						}
+					} else if val.Index(j).Type().ConvertibleTo(elem.Type()) {
+						elem.Set(val.Index(j).Convert(elem.Type()))
+					} else {
+						break
+						//return fmt.Errorf("cannot convert slice value for field %s", field.Name)
+					}
 				}
 				fieldValue.Set(slice)
 
@@ -102,7 +119,8 @@ func MapToStruct(m map[string]interface{}, s interface{}) error {
 				if val.Type().ConvertibleTo(fieldValue.Type()) {
 					fieldValue.Set(val.Convert(fieldValue.Type()))
 				} else {
-					return fmt.Errorf("cannot convert value for field %s", field.Name)
+					continue
+					//return fmt.Errorf("cannot convert value for field %s", field.Name)
 				}
 			}
 		}
