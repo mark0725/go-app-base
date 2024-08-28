@@ -6,10 +6,9 @@ import (
 	"fmt"
 	"strings"
 
+	_ "github.com/go-sql-driver/mysql"
 	applog "github.com/mark0725/go-app-base/logger"
 	"github.com/mark0725/go-app-base/utils"
-
-	_ "github.com/go-sql-driver/mysql"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -166,8 +165,8 @@ func GetDBConn(name string) *sql.DB {
 }
 
 func DBQueryEnt[T any](db string, table string, where string, params map[string]interface{}) ([]*T, error) {
-	var kb T
-	fields, err := GetTableFieldIds(&kb)
+	var ent T
+	fields, err := GetTableFieldIds(&ent)
 	if err != nil {
 		logger.Error("GetTableFieldIds fail: ", err)
 		return nil, err
@@ -191,19 +190,33 @@ func DBQueryEnt[T any](db string, table string, where string, params map[string]
 	}
 
 	if len(result) == 0 {
-		logger.Error("DBQuery notfound: ")
+		logger.Trace("DBQuery notfound: ")
 		return nil, nil
 	}
 
-	rows := utils.Map(result, func(map[string]interface{}) *T {
-		var kb T
-		if err := MapRowToStruct(result[0], &kb); err != nil {
+	rows := utils.Map(result, func(row map[string]interface{}) *T {
+		var rec T
+		if err := MapRowToStruct(row, &rec); err != nil {
 			logger.Error("MapRowToStruct fail: ", err)
 			return nil
 		}
 
-		return &kb
+		return &rec
 	})
 
 	return rows, nil
+}
+
+func DBInsertEnt[T any](db string, table string, ent *T) error {
+	// fields, err := GetTableFieldIds(ent)
+	// if err != nil {
+	// 	logger.Error("GetTableFieldIds fail: ", err)
+	// 	return err
+	// }
+
+	params := EntiryToMap(ent)
+	insertSql := InsertSqlBuilder(table, params, nil, nil)
+	_, err := DBExec(db, insertSql.Sql, insertSql.Params)
+
+	return err
 }

@@ -2,6 +2,7 @@ package db
 
 import (
 	"errors"
+	"fmt"
 	"reflect"
 )
 
@@ -112,4 +113,55 @@ func MapRowToStruct(data map[string]interface{}, result interface{}) error {
 	}
 
 	return nil
+}
+
+func EntiryToMap(obj interface{}) map[string]interface{} {
+	result := make(map[string]interface{})
+	objValue := reflect.ValueOf(obj)
+
+	// Handle pointer to struct
+	if objValue.Kind() == reflect.Ptr {
+		objValue = objValue.Elem()
+	}
+
+	if objValue.Kind() != reflect.Struct {
+		fmt.Println("Input is not a struct")
+		return result
+	}
+
+	objType := objValue.Type()
+
+	for i := 0; i < objValue.NumField(); i++ {
+		fieldValue := objValue.Field(i)
+		fieldType := objType.Field(i)
+
+		tag := fieldType.Tag.Get("field-id")
+		if tag == "" {
+			continue
+		}
+		//fieldName := fieldType.Name
+		fieldName := tag
+
+		// Process the field value depending on its kind.
+		switch fieldValue.Kind() {
+		case reflect.Ptr:
+			if !fieldValue.IsNil() {
+				result[fieldName] = fieldValue.Elem().Interface()
+			}
+		case reflect.Struct:
+			result[fieldName] = EntiryToMap(fieldValue.Interface())
+		case reflect.Slice:
+			sliceLen := fieldValue.Len()
+			sliceResult := make([]interface{}, sliceLen)
+			for j := 0; j < sliceLen; j++ {
+				sliceElem := fieldValue.Index(j).Interface()
+				sliceResult[j] = sliceElem
+			}
+			result[fieldName] = sliceResult
+		default:
+			result[fieldName] = fieldValue.Interface()
+		}
+	}
+
+	return result
 }
