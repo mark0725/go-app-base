@@ -3,6 +3,8 @@ package logger
 import (
 	"bytes"
 	"fmt"
+	"io"
+	"os"
 	"runtime"
 	"sort"
 	"strings"
@@ -11,10 +13,10 @@ import (
 )
 
 var g_Loggers map[string]*log.Logger = make(map[string]*log.Logger)
+var g_defaultLogConf = LoggerConfig{Level: "info"}
 
 func init() {
-	logger := log.New()
-	logger.SetLevel(log.InfoLevel)
+	logger := CreateLogger("default", &g_defaultLogConf)
 	g_Loggers["default"] = logger
 }
 
@@ -22,6 +24,9 @@ func LoggerInit(config *LogConfig) {
 	log.SetFormatter(&LoggerFormatter{})
 	//log.AddHook(FileLineHook{})
 	logLevel := log.InfoLevel
+	g_defaultLogConf.File = config.File
+	g_defaultLogConf.Format = config.Format
+	g_defaultLogConf.Level = config.Level
 
 	if lvl, err := log.ParseLevel(config.Level); err == nil {
 		logLevel = lvl
@@ -39,17 +44,7 @@ func LoggerInit(config *LogConfig) {
 	// 	FullTimestamp: true,
 	// })
 
-	initLoggers(config.Level, config.Loggers)
-
-	// if _, exists := g_Loggers["default"]; !exists {
-	// 	logger := CreateLogger("default", log.InfoLevel)
-	// 	g_Loggers["default"] = logger
-	// }
-
-	// log.Debug("This is a debug message") // 不会打印，因为默认级别是Info
-	// log.Info("This is an info message")
-	// log.Warn("This is a warning message")
-	// log.Error("This is an error message")
+	initLoggers(config.Loggers)
 }
 
 func GetLogger(name string) *log.Logger {
@@ -66,21 +61,14 @@ func GetLogger(name string) *log.Logger {
 		return logger
 	}
 
-	logger := log.New()
-	logger.SetLevel(log.InfoLevel)
-	logger.SetFormatter(&LoggerFormatter{name: name})
+	logger := CreateLogger(name, &g_defaultLogConf)
 	g_Loggers[name] = logger
 
 	return logger
 }
 
-func initLoggers(level string, logsConfig map[string]LoggerConfig) {
-
-	defaultLogConf := LoggerConfig{
-		Level: level,
-	}
-
-	logger := CreateLogger("default", &defaultLogConf)
+func initLoggers(logsConfig map[string]LoggerConfig) {
+	logger := CreateLogger("default", &g_defaultLogConf)
 	g_Loggers["default"] = logger
 
 	keys := make([]string, 0, len(logsConfig))
@@ -91,6 +79,16 @@ func initLoggers(level string, logsConfig map[string]LoggerConfig) {
 
 	for _, key := range keys {
 		loggerConf := logsConfig[key]
+		if loggerConf.File == "" {
+			loggerConf.File = g_defaultLogConf.File
+		}
+		if loggerConf.Format == "" {
+			loggerConf.Format = g_defaultLogConf.Format
+		}
+		if loggerConf.Level == "" {
+			loggerConf.Level = g_defaultLogConf.Level
+		}
+
 		logger := CreateLogger(key, &loggerConf)
 		g_Loggers[key] = logger
 
@@ -111,6 +109,15 @@ func CreateLogger(name string, conf *LoggerConfig) *log.Logger {
 	logger.SetFormatter(&LoggerFormatter{name: name})
 	//logger.AddHook(FileLineHook{})
 	logger.SetReportCaller(true)
+	if conf.File != "" {
+		if file, err := os.OpenFile(conf.File, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666); err != nil {
+			log.Error("Failed to open log file: ", err)
+		} else {
+			mw := io.MultiWriter(os.Stdout, file)
+			logger.SetOutput(mw)
+		}
+
+	}
 	// logger.SetFormatter(&log.TextFormatter{
 	// 	CallerPrettyfier: func(f *runtime.Frame) (string, string) {
 	// 		// 这里可以自定义包名和文件名的格式
