@@ -1,0 +1,26 @@
+org:
+  org_id: "TEST"
+app: 
+  app_home: "{{.vars.app.app_home}}"
+  home: "{{.env.HOME}}"
+
+log:
+  level: debug
+  file: "{{.vars.app.app_home}}/logs/app.log"
+  loggers:
+    chat: 
+      level: trace
+    llm: 
+      level: trace
+    bot: 
+      level: debug
+    extract: 
+      level: debug
+    database: 
+      level: debug
+    vec_store: 
+      level: debug
+    cache: 
+      level: debug
+    kb: 
+      level: trace

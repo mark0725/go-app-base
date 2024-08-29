@@ -1,7 +1,12 @@
 package config
 
 import (
+	"bytes"
+	"html/template"
 	"os"
+	"path/filepath"
+	"runtime"
+	"strings"
 
 	"github.com/BurntSushi/toml"
 	"github.com/joho/godotenv"
@@ -64,39 +69,141 @@ func LoadConfig(opts ...ConfigOption) (map[string]interface{}, error) {
 		return config, nil
 	}
 
-	if options.configFile != "" {
-		yamlConfg, err := loadConfigFile(options.configFile)
-		if err != nil {
-			log.Error("Error:", err)
-			return nil, err
+	rawconfig, err := func() (map[string]interface{}, error) {
+		config := make(map[string]interface{})
+		if options.configFile != "" {
+			yamlConfg, err := loadConfigFile(options.configFile)
+			if err != nil {
+				log.Error("Error:", err)
+				return nil, err
+			}
+
+			log.Tracef("config file data: %#v\n", yamlConfg)
+			config = utils.MergeMaps(config, yamlConfg)
+
 		}
 
-		log.Tracef("config file data: %#v\n", yamlConfg)
-		config = utils.MergeMaps(config, yamlConfg)
+		if options.prefix != "" {
+			var envConfigs map[string]interface{} = nil
+			_ = loadDotEnv(options.prefix)
 
+			tomlData, err := env2toml.Parse(options.prefix + "_")
+			if err != nil {
+				log.Error("Error:", err)
+				return nil, err
+			}
+			log.Trace(tomlData)
+
+			_, err = toml.Decode(tomlData, &envConfigs)
+			if err != nil {
+				log.Error("parse toml error", err)
+				return nil, err
+			}
+
+			log.Tracef("env config: %#v\n", envConfigs)
+
+			config = utils.MergeMaps(config, envConfigs)
+		}
+
+		return config, nil
+	}()
+
+	if err != nil {
+		return nil, err
 	}
 
-	if options.prefix != "" {
-		var envConfigs map[string]interface{} = nil
-		_ = loadDotEnv(options.prefix)
-
-		tomlData, err := env2toml.Parse(options.prefix + "_")
-		if err != nil {
-			log.Error("Error:", err)
-			return nil, err
+	envVars := make(map[string]string)
+	for _, envVar := range os.Environ() {
+		// 分割"key=value"格式的字符串
+		parts := strings.SplitN(envVar, "=", 2)
+		if len(parts) == 2 {
+			key, value := parts[0], parts[1]
+			//log.Trace("key:", key, "value:", value)
+			envVars[key] = value
 		}
-		log.Trace(tomlData)
+	}
 
-		_, err = toml.Decode(tomlData, &envConfigs)
-		if err != nil {
-			log.Error("parse toml error", err)
-			return nil, err
-		}
+	data, _ := yaml.Marshal(rawconfig)
+	values := map[string]interface{}{
+		"info": getAppInfo(),
+		"env":  envVars,
+		"vars": rawconfig,
+	}
 
-		log.Tracef("env config: %#v\n", envConfigs)
+	t := template.Must(template.New("template").Parse(string(data)))
+	var buf bytes.Buffer
+	if err := t.Execute(&buf, values); err != nil {
+		log.Error("parse param error:", err)
+		return nil, err
+	}
 
-		config = utils.MergeMaps(config, envConfigs)
+	err = yaml.Unmarshal(buf.Bytes(), &config)
+	if err != nil {
+		log.Errorf("error: %v", err)
+		return nil, err
 	}
 
 	return config, nil
+}
+
+type AppInfo struct {
+	AppName      string
+	AppRoot      string
+	WorkDir      string
+	AppVersion   string
+	AppBuildTime string
+	AppGitCommit string
+}
+
+type OSInfo struct {
+	OS   string
+	Arch string
+}
+
+func getAppInfo() map[string]interface{} {
+	appinfo := AppInfo{
+		AppRoot: getAppRoot(),
+		WorkDir: getWorkDir(),
+	}
+
+	info := map[string]interface{}{
+		"app": appinfo,
+		"os": OSInfo{
+			OS:   runtime.GOOS,
+			Arch: runtime.GOARCH,
+		},
+	}
+
+	return info
+}
+
+func getAppRoot() string {
+	exePath, err := os.Executable()
+	if err != nil {
+		log.Trace("无法获取可执行文件路径: ", err)
+		return ""
+	}
+
+	// 读取可执行文件的真实路径
+	exeRealPath, err := filepath.EvalSymlinks(exePath)
+	if err != nil {
+		log.Trace("无法解析符号链接: ", err)
+		return ""
+	}
+
+	// 获取可执行文件所在的目录
+	exeDir := filepath.Dir(exeRealPath)
+
+	return exeDir
+
+}
+
+func getWorkDir() string {
+	wd, err := os.Getwd()
+	if err != nil {
+		log.Trace("Error getting current working directory: ", err)
+		return ""
+	}
+
+	return wd
 }

@@ -147,8 +147,15 @@ func StructToMap(obj interface{}) map[string]interface{} {
 	for i := 0; i < objValue.NumField(); i++ {
 		fieldValue := objValue.Field(i)
 		fieldType := objType.Field(i)
+		tag := fieldType.Tag.Get("json")
+		tagOptions := strings.Split(tag, ",")
+		key := tagOptions[0]
+		//omitempty := tagOptions[1]
+		if key == "" {
+			continue
+		}
 
-		fieldName := fieldType.Name
+		fieldName := key
 
 		// Process the field value depending on its kind.
 		switch fieldValue.Kind() {
