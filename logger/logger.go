@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"runtime"
 	"sort"
 	"strings"
 
 	log "github.com/sirupsen/logrus"
+	"gopkg.in/natefinch/lumberjack.v2"
 )
 
 var g_Loggers map[string]*log.Logger = make(map[string]*log.Logger)
@@ -24,25 +24,12 @@ func LoggerInit(config *LogConfig) {
 	log.SetFormatter(&LoggerFormatter{})
 	//log.AddHook(FileLineHook{})
 	logLevel := log.InfoLevel
-	g_defaultLogConf.File = config.File
-	g_defaultLogConf.Format = config.Format
-	g_defaultLogConf.Level = config.Level
+	g_defaultLogConf = config.LoggerConfig
 
 	if lvl, err := log.ParseLevel(config.Level); err == nil {
 		logLevel = lvl
 	}
 	log.SetLevel(logLevel)
-
-	//log.SetReportCaller(true)
-	// log.SetFormatter(&log.TextFormatter{
-	// 	CallerPrettyfier: func(f *runtime.Frame) (string, string) {
-	// 		// 这里可以自定义包名和文件名的格式
-	// 		filename := filepath.Base(f.File)
-	// 		funcName := f.Function
-	// 		return funcName, filename
-	// 	},
-	// 	FullTimestamp: true,
-	// })
 
 	initLoggers(config.Loggers)
 }
@@ -110,23 +97,18 @@ func CreateLogger(name string, conf *LoggerConfig) *log.Logger {
 	//logger.AddHook(FileLineHook{})
 	logger.SetReportCaller(true)
 	if conf.File != "" {
-		if file, err := os.OpenFile(conf.File, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666); err != nil {
-			log.Error("Failed to open log file: ", err)
-		} else {
-			mw := io.MultiWriter(os.Stdout, file)
-			logger.SetOutput(mw)
+		logRotate := &lumberjack.Logger{
+			Filename:   conf.File,       // 日志文件路径
+			MaxSize:    conf.MaxAge,     // 每个日志文件最大10MB
+			MaxBackups: conf.MaxBackups, // 保留的备份文件个数
+			MaxAge:     conf.MaxAge,     // 保留备份文件的最大天数
+			Compress:   conf.Compress,   // 是否压缩备份文件
 		}
 
+		mw := io.MultiWriter(os.Stdout, logRotate)
+		logger.SetOutput(mw)
+
 	}
-	// logger.SetFormatter(&log.TextFormatter{
-	// 	CallerPrettyfier: func(f *runtime.Frame) (string, string) {
-	// 		// 这里可以自定义包名和文件名的格式
-	// 		//filename := filepath.Base(f.File)
-	// 		funcName := f.Function
-	// 		return funcName, ""
-	// 	},
-	// 	FullTimestamp: true,
-	// })
 
 	return logger
 }
@@ -172,35 +154,4 @@ func (f *LoggerFormatter) Format(entry *log.Entry) ([]byte, error) {
 	b.WriteString("\n")
 
 	return b.Bytes(), nil
-}
-
-type FileLineHook struct{}
-
-func (hook FileLineHook) Levels() []log.Level {
-	return log.AllLevels
-}
-
-func (hook FileLineHook) Fire(entry *log.Entry) error {
-	// Skip 4 levels to get the caller of the function which we're logging
-	pc, file, line, ok := runtime.Caller(4)
-	if !ok {
-		return nil
-	}
-
-	fn := runtime.FuncForPC(pc)
-	// Extract just the package and function name
-	fnName := fn.Name()
-	fnParts := strings.Split(fnName, "/")
-	fnName = fnParts[len(fnParts)-1]
-
-	// Trim down the file path to the last two segments for brevity
-	fileParts := strings.Split(file, "/")
-	file = strings.Join(fileParts[len(fileParts)-2:], "/")
-
-	// Add to the entry's data
-	entry.Data["file"] = file
-	entry.Data["line"] = line
-	entry.Data["func"] = fnName
-
-	return nil
 }
