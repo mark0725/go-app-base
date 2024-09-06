@@ -149,7 +149,7 @@ func QueryNamedParamsBuilder(sqlOld string, params map[string]interface{}) SqlBu
 			paramValue := reflect.ValueOf(param)
 			//fmt.Printf("param %s type: %v\n", varName, paramValue.Kind())
 			switch paramValue.Kind() {
-			case reflect.Slice:
+			case reflect.Slice, reflect.Array:
 				var varsBuilder strings.Builder
 				for i := 0; i < paramValue.Len(); i++ {
 					if i > 0 {
@@ -175,22 +175,20 @@ func DeleteSQLBuilder(table string, filters map[string]interface{}, wheres strin
 	var filterArr []string
 	var paraList []interface{}
 
-	if filters != nil {
-		for key, val := range filters {
-			switch v := val.(type) {
-			case []interface{}:
-				if len(v) > 0 {
-					placeholders := make([]string, len(v))
-					for i, item := range v {
-						paraList = append(paraList, item)
-						placeholders[i] = "?"
-					}
-					filterArr = append(filterArr, fmt.Sprintf("%s in (%s)", key, strings.Join(placeholders, ",")))
+	for key, val := range filters {
+		switch v := val.(type) {
+		case []interface{}:
+			if len(v) > 0 {
+				placeholders := make([]string, len(v))
+				for i, item := range v {
+					paraList = append(paraList, item)
+					placeholders[i] = "?"
 				}
-			default:
-				filterArr = append(filterArr, fmt.Sprintf("%s=?", key))
-				paraList = append(paraList, val)
+				filterArr = append(filterArr, fmt.Sprintf("%s in (%s)", key, strings.Join(placeholders, ",")))
 			}
+		default:
+			filterArr = append(filterArr, fmt.Sprintf("%s=?", key))
+			paraList = append(paraList, val)
 		}
 	}
 
