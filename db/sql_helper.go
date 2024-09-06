@@ -2,6 +2,7 @@ package db
 
 import (
 	"fmt"
+	"reflect"
 	"regexp"
 	"strings"
 
@@ -145,15 +146,16 @@ func QueryNamedParamsBuilder(sqlOld string, params map[string]interface{}) SqlBu
 		varName := strings.ToUpper(p[1 : len(p)-1])
 
 		if param, ok := params[varName]; ok {
-			switch param.(type) {
-			case []interface{}:
-				varsList := param.([]interface{})
+			paramValue := reflect.ValueOf(param)
+			//fmt.Printf("param %s type: %v\n", varName, paramValue.Kind())
+			switch paramValue.Kind() {
+			case reflect.Slice:
 				var varsBuilder strings.Builder
-				for i, v := range varsList {
+				for i := 0; i < paramValue.Len(); i++ {
 					if i > 0 {
 						varsBuilder.WriteString(",")
 					}
-					sqlParams = append(sqlParams, v)
+					sqlParams = append(sqlParams, paramValue.Index(i).Interface())
 					varsBuilder.WriteString("?")
 				}
 				sql = strings.Replace(sql, p, varsBuilder.String(), -1)
