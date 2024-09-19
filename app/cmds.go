@@ -4,15 +4,30 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var g_Cmds = []*cobra.Command{}
+var g_Cmds map[string]*AppCmd = make(map[string]*AppCmd)
 
-func RegisterCmd(cmd *cobra.Command) {
-	g_Cmds = append(g_Cmds, cmd)
+type AppCmdOption func(*AppCmdOptions)
+
+type AppCmd struct {
+	Name    string
+	Modules []string
+	Cmd     *cobra.Command
 }
 
-func InitializeCmds(parent *cobra.Command) error {
-	parent.AddCommand(
-		g_Cmds...,
-	)
+type AppCmdOptions struct {
+}
+
+func RegisterCmd(name string, cmd *cobra.Command, modules []string) {
+	g_Cmds[name] = &AppCmd{
+		Name:    name,
+		Modules: modules,
+		Cmd:     cmd,
+	}
+}
+
+func InitializeCmds(cmd string, parent *cobra.Command, opts ...AppCmdOption) error {
+	for _, v := range g_Cmds {
+		parent.AddCommand(v.Cmd)
+	}
 	return nil
 }
