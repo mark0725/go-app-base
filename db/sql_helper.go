@@ -29,15 +29,14 @@ func InsertSqlBuilder(table string, params map[string]interface{}, rawParams []s
 
 	paras := make(map[string]interface{})
 
+	for k, v := range params {
+		paras[k] = v
+	}
 	if defaultDate {
 		paras["DATA_CRT_DATE"] = utils.GetCurDate8()
 		paras["DATA_CRT_TIME"] = utils.GetCurDateTime14()
 		paras["DATA_UPD_DATE"] = utils.GetCurDate8()
 		paras["DATA_UPD_TIME"] = utils.GetCurDateTime14()
-	}
-
-	for k, v := range params {
-		paras[k] = v
 	}
 
 	for key, value := range paras {
@@ -87,26 +86,24 @@ func UpdateSQLBuilder(table string, params, filters map[string]interface{}, wher
 	}
 
 	// Build the filters part of the SQL statement.
-	if filters != nil {
-		for key, value := range filters {
-			if filterstr != "" {
-				filterstr += " and "
-			}
-			switch v := value.(type) {
-			case []interface{}:
-				filterstr += fmt.Sprintf("%s in (", key)
-				for i, elem := range v {
-					if i > 0 {
-						filterstr += ","
-					}
-					filterstr += "?"
-					paralist = append(paralist, elem)
+	for key, value := range filters {
+		if filterstr != "" {
+			filterstr += " and "
+		}
+		switch v := value.(type) {
+		case []interface{}:
+			filterstr += fmt.Sprintf("%s in (", key)
+			for i, elem := range v {
+				if i > 0 {
+					filterstr += ","
 				}
-				filterstr += ")"
-			default:
-				filterstr += fmt.Sprintf("%s=?", key)
-				paralist = append(paralist, value)
+				filterstr += "?"
+				paralist = append(paralist, elem)
 			}
+			filterstr += ")"
+		default:
+			filterstr += fmt.Sprintf("%s=?", key)
+			paralist = append(paralist, value)
 		}
 	}
 
