@@ -14,6 +14,7 @@ type AppModule struct {
 	Name    string
 	Module  IAppModule
 	Depends []string
+	Ready   bool
 	//Done    chan Signal
 }
 
@@ -21,7 +22,7 @@ type AppModuleOptions struct {
 	modules []string
 }
 
-var g_appModules = make(map[string]AppModule, 10)
+var g_appModules = make(map[string]*AppModule, 0)
 
 type AppModuleOption func(*AppModuleOptions)
 
@@ -31,8 +32,27 @@ func WithModules(modules []string) AppModuleOption {
 	}
 }
 
+func GetModules() map[string]*AppModule {
+	return g_appModules
+}
+
+func GetReadyModules() []string {
+	modules := make([]string, 0)
+	for _, module := range g_appModules {
+		if module.Ready {
+			modules = append(modules, module.Name)
+		}
+	}
+	return modules
+}
+
+func GetModule(name string) (AppModule, bool) {
+	module, ok := g_appModules[name]
+	return *module, ok
+}
+
 func AppModuleRegister(name string, module IAppModule, depends []string) {
-	g_appModules[name] = AppModule{
+	g_appModules[name] = &AppModule{
 		Name:    name,
 		Module:  module,
 		Depends: depends,
@@ -132,6 +152,7 @@ func InitializeModules(appConfig interface{}, opts ...AppModuleOption) error {
 		if err != nil {
 			return fmt.Errorf("failed to initialize module %s: %w", name, err)
 		}
+		module.Ready = true
 	}
 
 	return nil

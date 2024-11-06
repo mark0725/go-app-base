@@ -40,15 +40,19 @@ func GetServe(name string) (AppServe, bool) {
 
 func GetServeNamesByModule(module string) []string {
 	var names []string
-	for k, v := range g_appServes {
+	for _, v := range g_appServes {
 		if v.Module == module {
-			names = append(names, k)
+			names = append(names, v.Name)
 		}
 	}
 	return names
 }
 
-func RegisterServe(name string, module string, serve IAppServe) {
+func RegisterServe(name string, module string, serve IAppServe) error {
+	if _, ok := g_appModules[module]; !ok {
+		return fmt.Errorf("module %s not found", module)
+	}
+
 	id := fmt.Sprintf("%s.%s", module, name)
 	g_appServes[id] = AppServe{
 		Name:   name,
@@ -56,9 +60,19 @@ func RegisterServe(name string, module string, serve IAppServe) {
 		Serve:  serve,
 		//Done:    make(chan Signal),
 	}
+
+	return nil
 }
 
-func StartServe(ctx context.Context, serveId string) error {
+func StartServe(ctx context.Context, module string, serve string) error {
+	if v, ok := g_appModules[module]; !ok {
+		return fmt.Errorf("module %s not found", module)
+	} else {
+		if !v.Ready {
+			return fmt.Errorf("module %s not ready", module)
+		}
+	}
+	serveId := fmt.Sprintf("%s.%s", module, serve)
 	if v, ok := g_appServes[serveId]; ok {
 		err := v.Serve.Start(ctx)
 		if err != nil {
