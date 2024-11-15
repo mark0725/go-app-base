@@ -14,10 +14,38 @@ import (
 
 var g_Loggers map[string]*log.Logger = make(map[string]*log.Logger)
 var g_defaultLogConf = LoggerConfig{Level: "info"}
+var g_defaultLoggers = make(map[string]*log.Logger)
+var g_LoggerChangedHandles = make(map[string]func())
 
 func init() {
 	logger := CreateLogger("default", &g_defaultLogConf)
 	g_Loggers["default"] = logger
+}
+
+type LogLevelType string
+
+const (
+	LogLevelTrace LogLevelType = "trace"
+	LogLevelDebug LogLevelType = "debug"
+	LogLevelInfo  LogLevelType = "info"
+	LogLevelWarn  LogLevelType = "warn"
+	LogLevelError LogLevelType = "error"
+	LogLevelFatal LogLevelType = "fatal"
+	LogLevelPanic LogLevelType = "panic"
+)
+
+func SetLogLevel(level LogLevelType) {
+	logLevel := log.InfoLevel
+
+	if lvl, err := log.ParseLevel(string(level)); err == nil {
+		logLevel = lvl
+	}
+
+	log.SetLevel(logLevel)
+	g_defaultLogConf.Level = string(level)
+	for _, logger := range g_defaultLoggers {
+		logger.SetLevel(logLevel)
+	}
 }
 
 func LoggerInit(config *LogConfig) {
@@ -34,22 +62,18 @@ func LoggerInit(config *LogConfig) {
 	initLoggers(config.Loggers)
 }
 
+func OnLoggerChanged(name string, f func()) {
+	g_LoggerChangedHandles[name] = f
+}
+
 func GetLogger(name string) *log.Logger {
-
 	if logger, exists := g_Loggers[name]; exists {
-		return logger
-	}
-
-	if l, exists := g_Loggers["default"]; exists {
-		logger := log.New()
-		logger.SetLevel(l.GetLevel())
-		logger.SetFormatter(&LoggerFormatter{name: name})
-		g_Loggers[name] = logger
 		return logger
 	}
 
 	logger := CreateLogger(name, &g_defaultLogConf)
 	g_Loggers[name] = logger
+	g_defaultLoggers[name] = logger
 
 	return logger
 }
@@ -76,14 +100,28 @@ func initLoggers(logsConfig map[string]LoggerConfig) {
 			loggerConf.Level = g_defaultLogConf.Level
 		}
 
-		logger := CreateLogger(key, &loggerConf)
-		g_Loggers[key] = logger
+		if l, exists := g_Loggers[key]; exists {
+			configLogger(key, &loggerConf, l)
+			g_Loggers[key] = l
+			delete(g_defaultLoggers, key)
+			if h, exists := g_LoggerChangedHandles[key]; exists {
+				h()
+			}
+		} else {
+			logger := CreateLogger(key, &loggerConf)
+			g_Loggers[key] = logger
+		}
 
 		//fmt.Printf("Key: %s, Value: %s\n", key, appConfig.Logs[key].Level)
 	}
 }
 
 func CreateLogger(name string, conf *LoggerConfig) *log.Logger {
+	logger := log.New()
+	configLogger(name, conf, logger)
+	return logger
+}
+func configLogger(name string, conf *LoggerConfig, logger *log.Logger) {
 
 	logLevel := log.InfoLevel
 
@@ -91,7 +129,6 @@ func CreateLogger(name string, conf *LoggerConfig) *log.Logger {
 		logLevel = lvl
 	}
 
-	logger := log.New()
 	logger.SetLevel(logLevel)
 	logger.SetFormatter(&LoggerFormatter{name: name})
 	//logger.AddHook(FileLineHook{})
@@ -110,7 +147,6 @@ func CreateLogger(name string, conf *LoggerConfig) *log.Logger {
 
 	}
 
-	return logger
 }
 
 // LoggerFormatter is a custom log formatter.
