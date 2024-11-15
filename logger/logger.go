@@ -60,6 +60,10 @@ func LoggerInit(config *LogConfig) {
 	log.SetLevel(logLevel)
 
 	initLoggers(config.Loggers)
+
+	for name, logger := range g_defaultLoggers {
+		configLogger(name, &g_defaultLogConf, logger)
+	}
 }
 
 func OnLoggerChanged(name string, f func()) {
@@ -79,9 +83,6 @@ func GetLogger(name string) *log.Logger {
 }
 
 func initLoggers(logsConfig map[string]LoggerConfig) {
-	logger := CreateLogger("default", &g_defaultLogConf)
-	g_Loggers["default"] = logger
-
 	keys := make([]string, 0, len(logsConfig))
 	for key := range logsConfig {
 		keys = append(keys, key)
