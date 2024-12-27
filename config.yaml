@@ -24,3 +24,25 @@ log:
       level: debug
     kb: 
       level: trace
+
+web:
+  certs:
+    - name: "server"
+      cert: "{{.vars.app.app_home}}/ssl/server.crt"
+      cert_key: "{{.vars.app.app_home}}/ssl/server.key"
+      ca: "{{.vars.app.app_home}}/ssl/ca.crt"
+    - name: "ca"
+      cert: "{{.vars.app.app_home}}/ssl/ca.crt"
+       
+  servers:
+    - name: "public"
+      listen: "0.0.0.0:9988"
+      ssl_cert: "{{.vars.app.app_home}}/ssl/server.crt"
+      ssl_cert_key: "{{.vars.app.app_home}}/ssl/server.key"
+      static_dir: "{{.vars.app.app_home}}/static"
+      error_log: "{{.vars.app.app_home}}/logs/http_error.log"
+      access_log: "{{.vars.app.app_home}}/logs/http_access.log"
+      endpoints:
+        - path: "/api/v1"
+          module: "actions"
+          group: "sapi"
