@@ -7,12 +7,12 @@ import (
 	"strings"
 
 	_ "github.com/go-sql-driver/mysql"
+	//_ "github.com/godror/godror"
 	applog "github.com/mark0725/go-app-base/logger"
 	"github.com/mark0725/go-app-base/utils"
-	log "github.com/sirupsen/logrus"
 )
 
-var logger *log.Logger = nil
+var logger = applog.GetLogger("database")
 var g_DBConns map[string]*sql.DB = make(map[string]*sql.DB)
 
 const DB_CONN_NAME_DEFAULT string = "default"
@@ -20,20 +20,51 @@ const DB_CONN_NAME_DEFAULT string = "default"
 func InitDB(name string, config *DatabaseConfig) error {
 	// 配置 MySQL 数据库连接参数
 	logger = applog.GetLogger("database")
+	dsn := ""
+	driverName := "mysql"
+	if config.Driver != "" {
+		driverName = config.Driver
+	}
 
-	dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s",
-		config.DBUser,
-		config.DBPass,
-		config.Host,
-		config.Port,
-		config.DBName,
-	)
+	switch config.Type {
+	case "mysql":
+		dsn = fmt.Sprintf("%s:%s@tcp(%s:%d)/%s",
+			config.DBUser,
+			config.DBPass,
+			config.Host,
+			config.Port,
+			config.DBName,
+		)
+		if config.Options != "" {
+			dsn += "?" + config.Options
+		}
+	case "oracle":
+		dsn = fmt.Sprintf(`user="%s" password="%s" connectString="%s:%d/%s"`,
+			config.DBUser,
+			config.DBPass,
+			config.Host,
+			config.Port,
+			config.DBName,
+		)
+		if config.Options != "" {
+			dsn += " " + config.Options
+		}
+
+	default:
+		dsn = fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8mb4&parseTime=True&loc=Local",
+			config.DBUser,
+			config.DBPass,
+			config.Host,
+			config.Port,
+			config.DBName,
+		)
+	}
 
 	logger.Tracef("dsn: %s", dsn)
 	// 打开数据库连接
-	db, err := sql.Open("mysql", dsn)
+	db, err := sql.Open(driverName, dsn)
 	if err != nil {
-		log.Error(err)
+		logger.Error(err)
 		return err
 	}
 	//defer db.Close()
@@ -41,7 +72,7 @@ func InitDB(name string, config *DatabaseConfig) error {
 	// 验证连接是否成功
 	err = db.Ping()
 	if err != nil {
-		log.Error(err)
+		logger.Error(err)
 		return err
 	}
 
