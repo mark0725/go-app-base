@@ -1,5 +1,10 @@
 package db
 
+type SqlBuildResult struct {
+	Sql    string
+	Params []interface{}
+}
+
 type DatabaseConfig struct {
 	Type    string `json:"type"`
 	DBName  string `json:"dbname"`

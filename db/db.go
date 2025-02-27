@@ -12,21 +12,48 @@ import (
 	"github.com/mark0725/go-app-base/utils"
 )
 
+type DatabaseConnection struct {
+	Name   string
+	Type   string
+	Config *DatabaseConfig
+	Conn   *sql.DB
+}
+
+type IDatabase interface {
+	Init(db string, config *DatabaseConfig) error
+	//DBExec(sql string, params []any) (any, error)
+	//DBQuery(sql string, params []any) ([]map[string]any, error)
+	GetDBConn(name string) *DatabaseConnection
+	GetDBTables(db string, name string) ([]map[string]any, error)
+	GetDBTableFields(db string, table string) ([]map[string]any, error)
+}
+
 var logger = applog.GetLogger("database")
-var g_DBConns map[string]*sql.DB = make(map[string]*sql.DB)
+var g_DBConns map[string]*DatabaseConnection = make(map[string]*DatabaseConnection)
 
 const DB_CONN_NAME_DEFAULT string = "default"
 
 func InitDB(name string, config *DatabaseConfig) error {
 	// 配置 MySQL 数据库连接参数
 	logger = applog.GetLogger("database")
+
 	dsn := ""
-	driverName := "mysql"
-	if config.Driver != "" {
+	dbType := ""
+	driverName := ""
+	if config.Type == "" {
+		dbType = "mysql"
+		driverName = "mysql"
+	} else {
+		dbType = config.Type
+	}
+
+	if dbType == "mysql" && config.Driver == "" {
+		driverName = "mysql"
+	} else {
 		driverName = config.Driver
 	}
 
-	switch config.Type {
+	switch dbType {
 	case "mysql":
 		dsn = fmt.Sprintf("%s:%s@tcp(%s:%d)/%s",
 			config.DBUser,
@@ -48,6 +75,24 @@ func InitDB(name string, config *DatabaseConfig) error {
 		)
 		if config.Options != "" {
 			dsn += " " + config.Options
+		}
+	case "postgres":
+		if config.Driver == "" {
+			driverName = "pgx"
+		}
+		//connStr := "postgres://user:password@localhost:5432/mydb?sslmode=disable"
+		dsn = fmt.Sprintf("postgres://%s:%s@%s:%d/%s",
+			config.DBUser,
+			config.DBPass,
+			config.Host,
+			config.Port,
+			config.DBName,
+		)
+
+		if config.Options != "" {
+			dsn += "?" + config.Options
+		} else {
+			dsn += "?sslmode=disable"
 		}
 
 	default:
@@ -76,11 +121,18 @@ func InitDB(name string, config *DatabaseConfig) error {
 		return err
 	}
 
+	conn := &DatabaseConnection{
+		Name:   name,
+		Type:   dbType,
+		Config: config,
+		Conn:   db,
+	}
+
 	logger.Info("database connect success.")
 	if name != "" {
-		g_DBConns[name] = db
+		g_DBConns[name] = conn
 	} else {
-		g_DBConns[DB_CONN_NAME_DEFAULT] = db
+		g_DBConns[DB_CONN_NAME_DEFAULT] = conn
 	}
 	// db.SetMaxOpenConns(10)
 	// db.SetMaxIdleConns(5)
@@ -110,14 +162,14 @@ func InitDB(name string, config *DatabaseConfig) error {
 	return nil
 }
 
-func DBExec(db string, sql string, params []interface{}) (interface{}, error) {
+func DBExec(db string, sql string, params []any) (any, error) {
 	conn, exist := g_DBConns[db]
 	if !exist {
 		logger.Errorf("not found db: %s", db)
 		return nil, errors.New("not found db: " + db)
 	}
 
-	result, err := conn.Exec(sql, params...)
+	result, err := conn.Conn.Exec(sql, params...)
 	if err != nil {
 		logger.Errorf("Sql Error: %v: %s, %v", err, sql, params)
 		return nil, err
@@ -129,7 +181,7 @@ func DBExec(db string, sql string, params []interface{}) (interface{}, error) {
 	return result, nil
 }
 
-func DBQuery(db string, sql string, params []interface{}) ([]map[string]interface{}, error) {
+func DBQuery(db string, sql string, params []any) ([]map[string]any, error) {
 	conn, exist := g_DBConns[db]
 	if !exist {
 		logger.Errorf("not found db: %s", db)
@@ -137,7 +189,7 @@ func DBQuery(db string, sql string, params []interface{}) ([]map[string]interfac
 	}
 
 	// 执行查询
-	rows, err := conn.Query(sql, params...)
+	rows, err := conn.Conn.Query(sql, params...)
 	if err != nil {
 		logger.Errorf("Sql Error: %v: %s, %v", err, sql, params)
 		return nil, err
@@ -150,9 +202,9 @@ func DBQuery(db string, sql string, params []interface{}) ([]map[string]interfac
 		return nil, err
 	}
 
-	values := make([]interface{}, len(columns))
-	valuePtrs := make([]interface{}, len(columns))
-	var records []map[string]interface{}
+	values := make([]any, len(columns))
+	valuePtrs := make([]any, len(columns))
+	var records []map[string]any
 
 	for rows.Next() {
 		for i := range columns {
@@ -164,7 +216,7 @@ func DBQuery(db string, sql string, params []interface{}) ([]map[string]interfac
 			return nil, err
 		}
 
-		rowData := make(map[string]interface{})
+		rowData := make(map[string]any)
 		for i, col := range columns {
 			val := values[i]
 			b, ok := val.([]byte)
@@ -182,7 +234,7 @@ func DBQuery(db string, sql string, params []interface{}) ([]map[string]interfac
 
 }
 
-func GetDBConn(name string) *sql.DB {
+func GetDBConn(name string) *DatabaseConnection {
 	connName := DB_CONN_NAME_DEFAULT
 	if name != "" {
 		connName = name
@@ -195,7 +247,67 @@ func GetDBConn(name string) *sql.DB {
 	return nil
 }
 
-func DBQueryEnt[T any](db string, table string, where string, params map[string]interface{}) ([]*T, error) {
+func GetDBTables(db string, name string) ([]map[string]any, error) {
+	conn := GetDBConn(db)
+	if conn == nil {
+		return nil, errors.New("not found db: " + db)
+	}
+	switch conn.Type {
+	case "mysql":
+		return MysqlGetDBTables(db, name)
+	case "postgres":
+		return PostgresGetDBTables(db, name)
+	case "oracle":
+		return OracleGetDBTables(db, name)
+	case "sqlite":
+		return SqliteGetDBTables(db, name)
+	}
+
+	return nil, errors.New("not found db: " + db)
+}
+
+func GetDBTableFields(db string, table string) ([]map[string]any, error) {
+	conn := GetDBConn(db)
+	if conn == nil {
+		return nil, errors.New("not found db: " + db)
+	}
+
+	switch conn.Type {
+	case "mysql":
+		return MysqlGetDBTableFields(db, table)
+	case "postgres":
+		return PostgresGetDBTableFields(db, table)
+	case "oracle":
+		return OracleGetDBTableFields(db, table)
+	case "sqlite":
+		return SqliteGetDBTableFields(db, table)
+	}
+
+	return nil, errors.New("not found db: " + db)
+}
+
+func DBType2GoType(db string, dbType string) (string, error) {
+	conn := GetDBConn(db)
+	if conn == nil {
+		return "", errors.New("not found db: " + db)
+	}
+
+	switch conn.Type {
+	case "mysql":
+		return MysqlDBType2GoType(dbType)
+	case "postgres":
+		return PostgresDBType2GoType(dbType)
+	case "oracle":
+		return OracleDBType2GoType(dbType)
+	case "sqlite":
+		return SqliteDBType2GoType(dbType)
+	default:
+		return "", errors.New("not found db type: " + conn.Type)
+	}
+
+}
+
+func DBQueryEnt[T any](db string, table string, where string, params map[string]any) ([]*T, error) {
 	var ent T
 	fields, err := GetTableFieldIds(&ent)
 	if err != nil {
@@ -225,7 +337,7 @@ func DBQueryEnt[T any](db string, table string, where string, params map[string]
 		return nil, nil
 	}
 
-	rows := utils.Map(result, func(row map[string]interface{}) *T {
+	rows := utils.Map(result, func(row map[string]any) *T {
 		var rec T
 		if err := MapRowToStruct(row, &rec); err != nil {
 			logger.Error("MapRowToStruct fail: ", err)
