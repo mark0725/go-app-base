@@ -358,7 +358,12 @@ func DBInsertEnt[T any](db string, table string, ent *T) error {
 	// }
 
 	params := EntiryToMap(ent)
-	insertSql := InsertSqlBuilder(table, params, nil, nil)
+	sqlhelper := GetSqlHelper(db)
+	if sqlhelper == nil {
+		return errors.New("not found sqlhelper: " + db)
+	}
+
+	insertSql := sqlhelper.InsertSqlBuilder(table, params, nil, nil)
 	_, err := DBExec(db, insertSql.Sql, insertSql.Params)
 
 	return err

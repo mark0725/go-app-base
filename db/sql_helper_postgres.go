@@ -1,6 +1,7 @@
 package db
 
 import (
+	"encoding/json"
 	"fmt"
 	"reflect"
 	"regexp"
@@ -55,8 +56,14 @@ func (helper *PostgresHelper) InsertSqlBuilder(table string, params map[string]a
 			}
 		}
 		if !isRaw {
-			values += fmt.Sprintf("$%d", len(paralist)+1) // PostgreSQL uses $n placeholders
-			paralist = append(paralist, value)
+			paramValue := reflect.ValueOf(value)
+			if paramValue.Kind() == reflect.Array || paramValue.Kind() == reflect.Slice {
+				s, _ := json.Marshal(value)
+				paralist = append(paralist, string(s))
+			} else {
+				paralist = append(paralist, value)
+			}
+			values += fmt.Sprintf("$%d", len(paralist)) // PostgreSQL uses $n placeholders
 		} else {
 			values += fmt.Sprintf("%v", value)
 		}
@@ -138,11 +145,18 @@ func (helper *PostgresHelper) QueryNamedParamsBuilder(sqlOld string, params map[
 			paramValue := reflect.ValueOf(param)
 			switch paramValue.Kind() {
 			case reflect.Slice, reflect.Array:
-				sql = strings.Replace(sql, p, fmt.Sprintf("$%d", len(sqlParams)+1), -1)
-				sqlParams = append(sqlParams, param)
+				var varsBuilder strings.Builder
+				for i := 0; i < paramValue.Len(); i++ {
+					if i > 0 {
+						varsBuilder.WriteString(",")
+					}
+					sqlParams = append(sqlParams, paramValue.Index(i).Interface())
+					varsBuilder.WriteString(fmt.Sprintf("$%d", len(sqlParams)))
+				}
+				sql = strings.Replace(sql, p, varsBuilder.String(), -1)
 			default:
-				sql = strings.Replace(sql, p, fmt.Sprintf("$%d", len(sqlParams)+1), -1)
 				sqlParams = append(sqlParams, param)
+				sql = strings.Replace(sql, p, fmt.Sprintf("$%d", len(sqlParams)), -1)
 			}
 		} else {
 			sql = strings.Replace(sql, p, "NULL", -1)
