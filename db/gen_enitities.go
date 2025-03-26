@@ -84,9 +84,27 @@ func genEntity(db string, tableName string, entityName string, dir string) error
 		if fieldComment != "" {
 			fieldComment = fmt.Sprintf(" // %s", fieldComment)
 		}
-		enitityContent += fmt.Sprintf("\n%s %s"+"`"+`field-id:"%s" field-type:"%s"`+"`%s", varName, varType, field.Name, field.DataType, fieldComment)
+
+		tagOrm := fmt.Sprintf("gorm:\"column:%s;type:%s\"", field.Name, field.ColumnType)
+		if field.ColumnKey == "PRI" {
+			tagOrm = fmt.Sprintf("gorm:\"column:%s;type:%s;primaryKey\"", field.Name, field.ColumnType)
+
+		}
+
+		tagJson := fmt.Sprintf("json:\"%s,omitempty\"", strings.ToLower(field.Name))
+		tagYaml := fmt.Sprintf("yaml:\"%s,omitempty\"", strings.ToLower(field.Name))
+		tagEntiry := fmt.Sprintf(`field-id:"%s" field-type:"%s"`, field.Name, field.DataType)
+
+		fieldTag := fmt.Sprintf("%s %s %s %s", tagOrm, tagJson, tagYaml, tagEntiry)
+		if field.Comment != "" {
+			fieldTag = fieldTag + fmt.Sprintf(` field-comment:"%s"`, field.Comment)
+		}
+
+		enitityContent += fmt.Sprintf("\n%s %s `%s` %s", varName, varType, fieldTag, fieldComment)
 	}
 	enitityContent += "\n}"
+
+	enitityContent += "\n" + fmt.Sprintf(`func (%s) TableName() string { return "%s" }`+"\n", entityName, tableName)
 
 	//将内容写入文件
 	filePath := path.Join(dir, strings.ToLower(tableName)+".go")

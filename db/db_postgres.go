@@ -7,8 +7,8 @@ import (
 
 // PostgreSQL type mapping to Go types, including pgvector support
 var pgToGoTypeMap = map[string]string{
-	"smallint":         "int16",
-	"integer":          "int32",
+	"smallint":         "int32",
+	"integer":          "int64",
 	"bigint":           "int64",
 	"real":             "float32",
 	"double precision": "float64",
@@ -17,6 +17,7 @@ var pgToGoTypeMap = map[string]string{
 	"character":        "string",
 	"varchar":          "string",
 	"char":             "string",
+	"bpchar":           "string",
 	"text":             "string",
 	"bytea":            "[]byte",
 	"timestamp":        "time.Time",
@@ -63,11 +64,36 @@ func PostgresGetDBTableFields(db string, tableName string) ([]map[string]any, er
 	logger.Debug("genEntity:", tableName)
 	sql := `SELECT
 			c.column_name,
-			c.udt_name AS data_type,
 			CASE 
-				WHEN c.data_type = 'character varying' THEN c.udt_name || '(' || c.character_maximum_length || ')'
-				WHEN c.data_type = 'numeric' THEN c.udt_name || '(' || c.numeric_precision || ',' || c.numeric_scale || ')'
+				WHEN c.udt_name = 'bpchar' THEN 'char'
+				WHEN c.udt_name = 'varchar' THEN 'varchar'
+				WHEN c.udt_name = 'int4' THEN 'integer'
+				WHEN c.udt_name = 'int8' THEN 'bigint'
+				WHEN c.udt_name = 'numeric' THEN 'numeric'
+				WHEN c.udt_name = 'text' THEN 'text'
+				WHEN c.udt_name = 'bool' THEN 'boolean'
+				WHEN c.udt_name = 'timestamp' THEN 'timestamp'
+				WHEN c.udt_name = 'date' THEN 'date'
+				WHEN c.udt_name = 'time' THEN 'time'
 				ELSE c.udt_name
+			END AS data_type,
+			CASE 
+				WHEN c.data_type = 'character varying' THEN 'VARCHAR(' || c.character_maximum_length || ')'
+				WHEN c.data_type = 'numeric' THEN 'NUMERIC(' || c.numeric_precision || ',' || c.numeric_scale || ')'
+				ELSE 
+					CASE 
+						WHEN c.udt_name = 'bpchar' THEN 'CHAR(' || c.character_maximum_length || ')'
+						WHEN c.udt_name = 'varchar' THEN 'VARCHAR(' || c.character_maximum_length || ')'
+						WHEN c.udt_name = 'int4' THEN 'INTEGER'
+						WHEN c.udt_name = 'int8' THEN 'BIGINT'
+						WHEN c.udt_name = 'numeric' THEN 'NUMERIC(' || c.numeric_precision || ',' || c.numeric_scale || ')'
+						WHEN c.udt_name = 'text' THEN 'TEXT'
+						WHEN c.udt_name = 'bool' THEN 'BOOLEAN'
+						WHEN c.udt_name = 'timestamp' THEN 'TIMESTAMP'
+						WHEN c.udt_name = 'date' THEN 'DATE'
+						WHEN c.udt_name = 'time' THEN 'TIME'
+						ELSE c.udt_name
+					END
 			END AS column_type,
 			c.column_default,
 			c.is_nullable,
@@ -99,9 +125,10 @@ func PostgresGetDBTableFields(db string, tableName string) ([]map[string]any, er
 			)
 		WHERE
 			c.table_schema = 'public' 
-			AND c.table_name = $1 
+			AND c.table_name = $1
 		ORDER BY
-			c.ordinal_position`
+			c.ordinal_position;
+	`
 
 	result, err := DBQuery(db, sql, []interface{}{tableName})
 	if err != nil {

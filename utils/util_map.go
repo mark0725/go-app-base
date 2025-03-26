@@ -6,12 +6,12 @@ import (
 	"strings"
 )
 
-func MergeMaps(dst, src map[string]interface{}) map[string]interface{} {
+func MergeMaps(dst map[string]any, src map[string]any) map[string]any {
 	for key, srcValue := range src {
 		if dstValue, ok := dst[key]; ok {
 			// Both values are maps, need to merge them recursively
-			dstMap, dstOk := dstValue.(map[string]interface{})
-			srcMap, srcOk := srcValue.(map[string]interface{})
+			dstMap, dstOk := dstValue.(map[string]any)
+			srcMap, srcOk := srcValue.(map[string]any)
 			if dstOk && srcOk {
 				dst[key] = MergeMaps(dstMap, srcMap)
 			} else {
@@ -26,7 +26,25 @@ func MergeMaps(dst, src map[string]interface{}) map[string]interface{} {
 	return dst
 }
 
-func MapToStruct(m map[string]interface{}, s interface{}) error {
+func DeepMerge(maps ...map[string]any) map[string]any {
+	result := make(map[string]any)
+	for _, m := range maps {
+		for k, v := range m {
+			if existing, ok := result[k]; ok {
+				if existingMap, ok := existing.(map[string]any); ok {
+					if vMap, ok := v.(map[string]any); ok {
+						result[k] = DeepMerge(existingMap, vMap)
+						continue
+					}
+				}
+			}
+			result[k] = v
+		}
+	}
+	return result
+}
+
+func MapToStruct(m map[string]any, s any) error {
 	v := reflect.ValueOf(s).Elem()
 	t := v.Type()
 
@@ -64,7 +82,7 @@ func MapToStruct(m map[string]interface{}, s interface{}) error {
 			case reflect.Ptr:
 				if val.Kind() == reflect.Map && fieldValue.Type().Elem().Kind() == reflect.Struct {
 					ptr := reflect.New(fieldValue.Type().Elem())
-					err := MapToStruct(val.Interface().(map[string]interface{}), ptr.Interface())
+					err := MapToStruct(val.Interface().(map[string]any), ptr.Interface())
 					if err != nil {
 						return err
 					}
@@ -78,7 +96,7 @@ func MapToStruct(m map[string]interface{}, s interface{}) error {
 
 			case reflect.Struct:
 				if val.Kind() == reflect.Map {
-					err := MapToStruct(val.Interface().(map[string]interface{}), fieldValue.Addr().Interface())
+					err := MapToStruct(val.Interface().(map[string]any), fieldValue.Addr().Interface())
 					if err != nil {
 						return err
 					}
@@ -102,7 +120,7 @@ func MapToStruct(m map[string]interface{}, s interface{}) error {
 					}
 
 					if elem.Kind() == reflect.Struct && val.Index(j).Kind() == reflect.Map {
-						err := MapToStruct(val.Index(j).Interface().(map[string]interface{}), elem.Addr().Interface())
+						err := MapToStruct(val.Index(j).Interface().(map[string]any), elem.Addr().Interface())
 						if err != nil {
 							return err
 						}
@@ -128,8 +146,8 @@ func MapToStruct(m map[string]interface{}, s interface{}) error {
 	return nil
 }
 
-func StructToMap(obj interface{}) map[string]interface{} {
-	result := make(map[string]interface{})
+func StructToMap(obj any) map[string]any {
+	result := make(map[string]any)
 	objValue := reflect.ValueOf(obj)
 
 	// Handle pointer to struct
@@ -167,7 +185,7 @@ func StructToMap(obj interface{}) map[string]interface{} {
 			result[fieldName] = StructToMap(fieldValue.Interface())
 		case reflect.Slice:
 			sliceLen := fieldValue.Len()
-			sliceResult := make([]interface{}, sliceLen)
+			sliceResult := make([]any, sliceLen)
 			for j := 0; j < sliceLen; j++ {
 				sliceElem := fieldValue.Index(j).Interface()
 				sliceResult[j] = sliceElem

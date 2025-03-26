@@ -96,6 +96,10 @@ func InitializeModules(appConfig interface{}, opts ...AppModuleOption) error {
 			inDegree[name] = 0
 		}
 		module := g_appModules[name]
+		if module == nil {
+			return fmt.Errorf("module %s not found", name)
+		}
+
 		for _, dep := range module.Depends {
 			if _, ok := inDegree[dep]; !ok {
 				inDegree[dep] = 1
