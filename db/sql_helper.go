@@ -10,6 +10,7 @@ type ISqlHelper interface {
 	QueryNamedParamsBuilder(sqlOld string, params map[string]any) SqlBuildResult
 	DeleteSQLBuilder(table string, filters map[string]any, wheres string) SqlBuildResult
 	QueryBaseSqlBuilder(sql string, params map[string]any) error
+	PageQueryBuilder(sql string, limit int, offset int) (string, error)
 }
 
 var g_DBHelpers = map[string]ISqlHelper{}
@@ -64,6 +65,20 @@ func QueryNamedParamsBuilder(sqlOld string, params map[string]any) SqlBuildResul
 	}
 
 	return helper.QueryNamedParamsBuilder(sqlOld, params)
+}
+
+func PageQueryBuilder(db string, sql string, limit int, offset int) (string, error) {
+	conn := GetDBConn(db)
+	if conn == nil {
+		return "", fmt.Errorf("not found db: %s", db)
+	}
+
+	helper := g_DBHelpers[conn.Type]
+	if helper == nil {
+		return "", fmt.Errorf("not found db helper: %s", conn.Name)
+	}
+
+	return helper.PageQueryBuilder(sql, limit, offset)
 }
 
 func DeleteSQLBuilder(table string, filters map[string]any, wheres string) SqlBuildResult {

@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"math"
 	"strings"
 
 	_ "github.com/go-sql-driver/mysql"
@@ -177,6 +178,77 @@ func DBExec(db string, sql string, params []any) (any, error) {
 
 	// insertedID, _ := result.LastInsertId()
 	logger.Tracef("Sql success: %s, %v", sql, params)
+
+	return result, nil
+}
+
+func DBPageQuery(db string, sql string, params map[string]any, pageSize int, pageIndex int) (*PageQueryResult, error) {
+
+	result := &PageQueryResult{
+		Content:          []map[string]any{},
+		First:            true,
+		Last:             true,
+		Number:           0,
+		NumberOfElements: 0,
+		Size:             pageSize,
+		TotalElements:    0,
+		TotalPages:       0,
+	}
+
+	if pageIndex > 0 {
+		result.First = false
+	}
+
+	countSql := fmt.Sprintf("select count(*) num from (%s) _PAGECOUNT", sql)
+	sqlCounterBuildResult := QueryNamedParamsBuilder(countSql, params)
+	logger.Trace("count query sql:", sqlCounterBuildResult.Sql)
+	logger.Trace("count query params:", sqlCounterBuildResult.Params)
+	dbCountResult, err := DBQuery(db, sqlCounterBuildResult.Sql, sqlCounterBuildResult.Params)
+	if err != nil {
+		logger.Error("DBQuery fail: ", err)
+		return nil, err
+	}
+
+	if len(dbCountResult) == 0 {
+		result.Last = true
+		return result, nil
+	}
+
+	num := dbCountResult[0]["num"].(int64)
+	if num == 0 {
+		result.Last = true
+		return result, nil
+	}
+
+	logger.Trace("row count:", num)
+	result.TotalElements = int(num)
+	result.TotalPages = int(math.Ceil(float64(result.TotalElements) / float64(result.Size)))
+	logger.Trace("page count:", result.TotalPages)
+	if result.TotalPages == 0 || pageIndex == result.TotalPages-1 {
+		result.Last = true
+	}
+
+	startIndex := pageIndex * pageSize
+
+	querySql, _ := PageQueryBuilder(db, sql, pageSize, startIndex)
+	sqlBuildResult := QueryNamedParamsBuilder(querySql, params)
+	logger.Trace("query sql:", sqlBuildResult.Sql)
+	logger.Trace("query params:", sqlBuildResult.Params)
+	dbResult, err := DBQuery(db, sqlBuildResult.Sql, sqlBuildResult.Params)
+	if err != nil {
+		logger.Error("DBQuery fail: ", err)
+		return nil, err
+	}
+
+	if len(dbResult) == 0 {
+		result.Last = true
+		return result, nil
+	}
+
+	result.Content = dbResult
+
+	result.Number = pageIndex
+	result.NumberOfElements = len(result.Content)
 
 	return result, nil
 }

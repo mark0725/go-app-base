@@ -168,6 +168,9 @@ func (helper *MysqlHelper) QueryNamedParamsBuilder(sqlOld string, params map[str
 
 	return SqlBuildResult{Sql: sql, Params: sqlParams}
 }
+func (helper *MysqlHelper) PageQueryBuilder(sql string, limit int, offset int) (string, error) {
+	return fmt.Sprintf("%s limit %d offset %d", sql, limit, offset), nil
+}
 
 func (helper *MysqlHelper) DeleteSQLBuilder(table string, filters map[string]any, wheres string) SqlBuildResult {
 	var filterArr []string

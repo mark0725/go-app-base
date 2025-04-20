@@ -15,3 +15,14 @@ type DatabaseConfig struct {
 	Driver  string `json:"driver"`
 	Options string `json:"options"`
 }
+
+type PageQueryResult struct {
+	TotalElements    int              `json:"totalElements"`
+	TotalPages       int              `json:"totalPages"`
+	Last             bool             `json:"last"`
+	NumberOfElements int              `json:"numberOfElements"`
+	First            bool             `json:"first"`
+	Size             int              `json:"size"`
+	Number           int              `json:"number"`
+	Content          []map[string]any `json:"content"`
+}

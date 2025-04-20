@@ -166,6 +166,10 @@ func (helper *OracleHelper) QueryNamedParamsBuilder(sqlOld string, params map[st
 	return SqlBuildResult{Sql: sql, Params: sqlParams}
 }
 
+func (helper *OracleHelper) PageQueryBuilder(sql string, limit int, offset int) (string, error) {
+	return fmt.Sprintf("%s OFFSET %d ROWS FETCH NEXT %d ROWS ONLY", sql, offset, limit), nil
+}
+
 func (helper *OracleHelper) DeleteSQLBuilder(table string, filters map[string]any, wheres string) SqlBuildResult {
 	var filterArr []string
 	var paraList []any

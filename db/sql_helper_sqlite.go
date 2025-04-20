@@ -164,6 +164,9 @@ func (helper *SqliteHelper) QueryNamedParamsBuilder(sqlOld string, params map[st
 	return SqlBuildResult{Sql: sql, Params: sqlParams}
 }
 
+func (helper *SqliteHelper) PageQueryBuilder(sql string, limit int, offset int) (string, error) {
+	return fmt.Sprintf("%s LIMIT %d OFFSET %d", sql, limit, offset), nil
+}
 func (helper *SqliteHelper) DeleteSQLBuilder(table string, filters map[string]any, wheres string) SqlBuildResult {
 	var filterArr []string
 	var paraList []any
