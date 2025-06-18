@@ -145,16 +145,16 @@ func MapToStruct(m map[string]any, s any) error {
 	}
 	return nil
 }
-
 func StructToMap(obj any) map[string]any {
 	result := make(map[string]any)
 	objValue := reflect.ValueOf(obj)
 
-	// Handle pointer to struct
+	// 如果是指针，则取其所指向的内容
 	if objValue.Kind() == reflect.Ptr {
 		objValue = objValue.Elem()
 	}
 
+	// 只有结构体才进行处理，否则直接返回空 map
 	if objValue.Kind() != reflect.Struct {
 		return result
 	}
@@ -170,6 +170,7 @@ func StructToMap(obj any) map[string]any {
 			continue
 		}
 
+		// 解析 json tag
 		tag := fieldType.Tag.Get("json")
 		tagParts := strings.Split(tag, ",")
 		tagKey := tagParts[0]
@@ -180,7 +181,7 @@ func StructToMap(obj any) map[string]any {
 			}
 		}
 
-		// 忽略 `-`
+		// 忽略 "-"
 		if tagKey == "-" {
 			continue
 		}
@@ -190,7 +191,7 @@ func StructToMap(obj any) map[string]any {
 			fieldName = fieldType.Name
 		}
 
-		// 处理omitempty: 零值则不处理本字段
+		// 如果有 omitempty 并且字段是零值，则跳过
 		if omitempty && isZero(fieldValue) {
 			continue
 		}
@@ -208,32 +209,13 @@ func StructToMap(obj any) map[string]any {
 		case reflect.Ptr:
 			if !fieldValue.IsNil() {
 				elem := fieldValue.Elem()
-				if elem.Kind() == reflect.Struct {
-					result[fieldName] = StructToMap(elem.Interface())
-				} else {
-					result[fieldName] = elem.Interface()
-				}
+				result[fieldName] = handleValue(elem, omitempty)
 			} else if !omitempty {
-				// 显示为nil，仅non-omitempty情况下
+				// 显示为nil，仅在 non-omitempty 时
 				result[fieldName] = nil
 			}
-		case reflect.Struct:
-			result[fieldName] = StructToMap(fieldValue.Interface())
-		case reflect.Slice:
-			if fieldValue.Len() == 0 && omitempty {
-				continue
-			}
-			sliceLen := fieldValue.Len()
-			sliceResult := make([]any, sliceLen)
-			for j := 0; j < sliceLen; j++ {
-				elemValue := fieldValue.Index(j)
-				if elemValue.Kind() == reflect.Struct {
-					sliceResult[j] = StructToMap(elemValue.Interface())
-				} else {
-					sliceResult[j] = elemValue.Interface()
-				}
-			}
-			result[fieldName] = sliceResult
+		case reflect.Struct, reflect.Slice, reflect.Array, reflect.Map, reflect.Interface:
+			result[fieldName] = handleValue(fieldValue, omitempty)
 		default:
 			result[fieldName] = fieldValue.Interface()
 		}
@@ -242,7 +224,70 @@ func StructToMap(obj any) map[string]any {
 	return result
 }
 
-// 判断reflect.Value是否为零值
+// handleValue 递归处理各种类型（struct、slice、array、map、指针）
+func handleValue(v reflect.Value, omitempty bool) any {
+	if !v.IsValid() {
+		return nil
+	}
+
+	switch v.Kind() {
+	case reflect.Struct:
+		// 结构体：再次调用 StructToMap
+		return StructToMap(v.Interface())
+
+	case reflect.Slice, reflect.Array:
+		// 切片或数组
+		if v.Len() == 0 && omitempty {
+			return nil
+		}
+		sliceLen := v.Len()
+		sliceResult := make([]any, sliceLen)
+		for i := 0; i < sliceLen; i++ {
+			elemValue := v.Index(i)
+			sliceResult[i] = handleValue(elemValue, omitempty)
+		}
+		return sliceResult
+
+	case reflect.Map:
+		// map 类型
+		if v.Len() == 0 && omitempty {
+			return nil
+		}
+		mapResult := make(map[string]any, v.Len())
+		for _, key := range v.MapKeys() {
+			val := v.MapIndex(key)
+			mapResult[key.String()] = handleValue(val, omitempty)
+		}
+		return mapResult
+
+	case reflect.Ptr:
+		if v.IsNil() {
+			if !omitempty {
+				return nil
+			}
+			return nil
+		}
+		elem := v.Elem()
+		return handleValue(elem, omitempty)
+
+	case reflect.Interface:
+		// interface 类型，取其底层元素并再次处理
+		if v.IsNil() {
+			if !omitempty {
+				return nil
+			}
+			return nil
+		}
+		elem := v.Elem()
+		return handleValue(elem, omitempty)
+
+	default:
+		// 其他基础类型直接返回
+		return v.Interface()
+	}
+}
+
+// 判断 reflect.Value 是否为零值
 func isZero(v reflect.Value) bool {
 	switch v.Kind() {
 	case reflect.String:
@@ -258,7 +303,6 @@ func isZero(v reflect.Value) bool {
 	case reflect.Interface, reflect.Ptr, reflect.Slice, reflect.Map, reflect.Chan, reflect.Func:
 		return v.IsNil()
 	case reflect.Struct:
-		// 检查每个字段
 		for i := 0; i < v.NumField(); i++ {
 			if !isZero(v.Field(i)) {
 				return false
