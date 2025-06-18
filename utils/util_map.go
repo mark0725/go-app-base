@@ -156,7 +156,6 @@ func StructToMap(obj any) map[string]any {
 	}
 
 	if objValue.Kind() != reflect.Struct {
-		fmt.Println("Input is not a struct")
 		return result
 	}
 
@@ -165,30 +164,74 @@ func StructToMap(obj any) map[string]any {
 	for i := 0; i < objValue.NumField(); i++ {
 		fieldValue := objValue.Field(i)
 		fieldType := objType.Field(i)
-		tag := fieldType.Tag.Get("json")
-		tagOptions := strings.Split(tag, ",")
-		key := tagOptions[0]
-		//omitempty := tagOptions[1]
-		if key == "" {
+
+		// 跳过未导出字段
+		if fieldType.PkgPath != "" {
 			continue
 		}
 
-		fieldName := key
+		tag := fieldType.Tag.Get("json")
+		tagParts := strings.Split(tag, ",")
+		tagKey := tagParts[0]
+		omitempty := false
+		for _, part := range tagParts[1:] {
+			if part == "omitempty" {
+				omitempty = true
+			}
+		}
 
-		// Process the field value depending on its kind.
+		// 忽略 `-`
+		if tagKey == "-" {
+			continue
+		}
+
+		fieldName := tagKey
+		if fieldName == "" {
+			fieldName = fieldType.Name
+		}
+
+		// 处理omitempty: 零值则不处理本字段
+		if omitempty && isZero(fieldValue) {
+			continue
+		}
+
+		// 匿名字段嵌入体特殊处理
+		if fieldType.Anonymous && fieldValue.Kind() == reflect.Struct {
+			embedMap := StructToMap(fieldValue.Interface())
+			for k, v := range embedMap {
+				result[k] = v
+			}
+			continue
+		}
+
 		switch fieldValue.Kind() {
 		case reflect.Ptr:
 			if !fieldValue.IsNil() {
-				result[fieldName] = fieldValue.Elem().Interface()
+				elem := fieldValue.Elem()
+				if elem.Kind() == reflect.Struct {
+					result[fieldName] = StructToMap(elem.Interface())
+				} else {
+					result[fieldName] = elem.Interface()
+				}
+			} else if !omitempty {
+				// 显示为nil，仅non-omitempty情况下
+				result[fieldName] = nil
 			}
 		case reflect.Struct:
 			result[fieldName] = StructToMap(fieldValue.Interface())
 		case reflect.Slice:
+			if fieldValue.Len() == 0 && omitempty {
+				continue
+			}
 			sliceLen := fieldValue.Len()
 			sliceResult := make([]any, sliceLen)
 			for j := 0; j < sliceLen; j++ {
-				sliceElem := fieldValue.Index(j).Interface()
-				sliceResult[j] = sliceElem
+				elemValue := fieldValue.Index(j)
+				if elemValue.Kind() == reflect.Struct {
+					sliceResult[j] = StructToMap(elemValue.Interface())
+				} else {
+					sliceResult[j] = elemValue.Interface()
+				}
 			}
 			result[fieldName] = sliceResult
 		default:
@@ -197,4 +240,32 @@ func StructToMap(obj any) map[string]any {
 	}
 
 	return result
+}
+
+// 判断reflect.Value是否为零值
+func isZero(v reflect.Value) bool {
+	switch v.Kind() {
+	case reflect.String:
+		return v.Len() == 0
+	case reflect.Bool:
+		return !v.Bool()
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return v.Int() == 0
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
+		return v.Uint() == 0
+	case reflect.Float32, reflect.Float64:
+		return v.Float() == 0
+	case reflect.Interface, reflect.Ptr, reflect.Slice, reflect.Map, reflect.Chan, reflect.Func:
+		return v.IsNil()
+	case reflect.Struct:
+		// 检查每个字段
+		for i := 0; i < v.NumField(); i++ {
+			if !isZero(v.Field(i)) {
+				return false
+			}
+		}
+		return true
+	default:
+		return false
+	}
 }
