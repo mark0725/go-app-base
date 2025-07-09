@@ -2,11 +2,11 @@ package config
 
 import (
 	"bytes"
-	"html/template"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"text/template"
 
 	"github.com/BurntSushi/toml"
 	"github.com/joho/godotenv"

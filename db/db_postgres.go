@@ -27,6 +27,7 @@ var pgToGoTypeMap = map[string]string{
 	"timetz":           "time.Time",
 	"boolean":          "bool",
 	"vector":           "[]float32", // pgvector 的 vector 类型映射到 Go 的 float32 切片
+	"halfvec":          "[]float32", // pgvector 的 vector 类型映射到 Go 的 float32 切片
 }
 
 func PostgresInitDB(name string, config *DatabaseConfig) error {
