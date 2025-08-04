@@ -81,8 +81,8 @@ func (helper *PostgresHelper) UpdateSQLBuilder(table string, params, filters map
 	var paralist []any
 
 	// Merge params with update timestamps
-	params["data_upd_date"] = utils.GetCurDate8()
-	params["data_upd_time"] = utils.GetCurDateTime14()
+	params["DATA_UPD_DATE"] = utils.GetCurDate8()
+	params["DATA_UPD_TIME"] = utils.GetCurDateTime14()
 
 	// Build the SET clause
 	for key, value := range params {
