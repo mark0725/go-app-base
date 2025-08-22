@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"strconv"
 	"strings"
 
 	_ "github.com/go-sql-driver/mysql"
@@ -377,6 +378,95 @@ func DBType2GoType(db string, dbType string) (string, error) {
 		return "", errors.New("not found db type: " + conn.Type)
 	}
 
+}
+
+type DBQueryOptions struct {
+	// db     string
+	// table  string
+	limit  int
+	offset int
+	wheres string
+	order  string
+	params map[string]any
+}
+
+func NewDBQueryOptions() *DBQueryOptions {
+	return &DBQueryOptions{
+		limit:  -1,
+		offset: -1,
+		params: map[string]any{},
+	}
+}
+func (options *DBQueryOptions) Limit(limit int) *DBQueryOptions {
+	options.limit = limit
+	return options
+}
+func (options *DBQueryOptions) Offset(offset int) *DBQueryOptions {
+	options.offset = offset
+	return options
+}
+func (options *DBQueryOptions) Where(where string) *DBQueryOptions {
+	options.wheres = where
+	return options
+}
+func (options *DBQueryOptions) Order(order string) *DBQueryOptions {
+	options.order = order
+	return options
+}
+func (options *DBQueryOptions) Params(params map[string]any) *DBQueryOptions {
+	options.params = params
+	return options
+}
+
+func DBQueryEnt2[T any](db string, table string, options *DBQueryOptions) ([]*T, error) {
+	var ent T
+	fields, err := GetTableFieldIds(&ent)
+	if err != nil {
+		logger.Error("GetTableFieldIds fail: ", err)
+		return nil, err
+	}
+
+	sqlOld := "SELECT " + strings.Join(fields, ",") + " FROM  " + table
+	if options != nil {
+		if options.wheres != "" {
+			sqlOld = sqlOld + " where " + options.wheres
+		}
+
+		if options.order != "" {
+			sqlOld = sqlOld + " order by " + options.order
+		}
+
+		if options.limit >= 0 {
+			sqlOld = sqlOld + " limit " + strconv.Itoa(options.limit)
+		}
+	}
+
+	sqlResult := QueryNamedParamsBuilder(sqlOld, options.params)
+	logger.Trace("query sql:", sqlResult.Sql)
+	logger.Trace("query params:", sqlResult.Params)
+
+	result, err := DBQuery(db, sqlResult.Sql, sqlResult.Params)
+	if err != nil {
+		logger.Error("DBQuery fail: ", err)
+		return nil, err
+	}
+
+	if len(result) == 0 {
+		logger.Trace("DBQuery notfound: ")
+		return nil, nil
+	}
+
+	rows := utils.Map(result, func(row map[string]any) *T {
+		var rec T
+		if err := MapRowToStruct(row, &rec); err != nil {
+			logger.Error("MapRowToStruct fail: ", err)
+			return nil
+		}
+
+		return &rec
+	})
+
+	return rows, nil
 }
 
 func DBQueryEnt[T any](db string, table string, where string, params map[string]any) ([]*T, error) {
