@@ -382,10 +382,12 @@ func DBType2GoType(db string, dbType string) (string, error) {
 
 type DBQueryOptions struct {
 	// db     string
-	// table  string
+	table  string
+	fields []string
 	limit  int
 	offset int
 	wheres string
+	group  string
 	order  string
 	params map[string]any
 }
@@ -397,6 +399,17 @@ func NewDBQueryOptions() *DBQueryOptions {
 		params: map[string]any{},
 	}
 }
+
+func (options *DBQueryOptions) Table(table string) *DBQueryOptions {
+	options.table = table
+	return options
+}
+
+func (options *DBQueryOptions) Fields(fields []string) *DBQueryOptions {
+	options.fields = fields
+	return options
+}
+
 func (options *DBQueryOptions) Limit(limit int) *DBQueryOptions {
 	options.limit = limit
 	return options
@@ -409,6 +422,10 @@ func (options *DBQueryOptions) Where(where string) *DBQueryOptions {
 	options.wheres = where
 	return options
 }
+func (options *DBQueryOptions) Group(group string) *DBQueryOptions {
+	options.group = group
+	return options
+}
 func (options *DBQueryOptions) Order(order string) *DBQueryOptions {
 	options.order = order
 	return options
@@ -416,6 +433,35 @@ func (options *DBQueryOptions) Order(order string) *DBQueryOptions {
 func (options *DBQueryOptions) Params(params map[string]any) *DBQueryOptions {
 	options.params = params
 	return options
+}
+
+func (options *DBQueryOptions) Build() string {
+	fields := []string{"*"}
+	if len(options.fields) > 0 {
+		fields = options.fields
+	}
+
+	sql := fmt.Sprintf("SELECT %s FROM %s", strings.Join(fields, ","), options.table)
+	if options != nil {
+		if options.wheres != "" {
+			sql = sql + " where " + options.wheres
+		}
+
+		if options.order != "" {
+			sql = sql + " order by " + options.order
+		}
+
+		if options.group != "" {
+			sql = sql + " group by " + options.group
+		}
+
+		if options.limit >= 0 {
+			sql = sql + " limit " + strconv.Itoa(options.limit)
+		}
+
+	}
+
+	return sql
 }
 
 func DBQueryEnt2[T any](db string, table string, options *DBQueryOptions) ([]*T, error) {
@@ -426,20 +472,7 @@ func DBQueryEnt2[T any](db string, table string, options *DBQueryOptions) ([]*T,
 		return nil, err
 	}
 
-	sqlOld := "SELECT " + strings.Join(fields, ",") + " FROM  " + table
-	if options != nil {
-		if options.wheres != "" {
-			sqlOld = sqlOld + " where " + options.wheres
-		}
-
-		if options.order != "" {
-			sqlOld = sqlOld + " order by " + options.order
-		}
-
-		if options.limit >= 0 {
-			sqlOld = sqlOld + " limit " + strconv.Itoa(options.limit)
-		}
-	}
+	sqlOld := options.Table(table).Fields(fields).Build()
 
 	sqlResult := QueryNamedParamsBuilder(sqlOld, options.params)
 	logger.Trace("query sql:", sqlResult.Sql)

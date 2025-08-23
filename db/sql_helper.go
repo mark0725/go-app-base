@@ -112,18 +112,24 @@ func GetSqlHelper(db string) ISqlHelper {
 }
 
 type QueryParamsOptions struct {
+	sql           string
 	params        map[string]any
 	defaultPrefix string
 	otherPrefixes map[string][]string
 	spOps         map[string]string
+	groupBy       string
+	orderBy       string
 }
 
 func NewQueryParamsBuilder() *QueryParamsOptions {
 	return &QueryParamsOptions{
+		sql:           "",
 		params:        make(map[string]any),
 		defaultPrefix: "",
 		otherPrefixes: make(map[string][]string),
 		spOps:         make(map[string]string),
+		groupBy:       "",
+		orderBy:       "",
 	}
 }
 func (q *QueryParamsOptions) DefaultPrefix(prefix string) *QueryParamsOptions {
@@ -142,6 +148,37 @@ func (q *QueryParamsOptions) SpOps(spOps map[string]string) *QueryParamsOptions 
 	q.spOps = spOps
 	return q
 }
+
+func (q *QueryParamsOptions) Sql(sql string) *QueryParamsOptions {
+	q.sql = sql
+	return q
+}
+
+func (q *QueryParamsOptions) GroupBy(groupBy string) *QueryParamsOptions {
+	q.groupBy = groupBy
+	return q
+}
+
+func (q *QueryParamsOptions) OrderBy(orderBy string) *QueryParamsOptions {
+	q.orderBy = orderBy
+	return q
+}
+
+func (q *QueryParamsOptions) BuildSql() string {
+	sqlParts := q.Build()
+	sql := q.sql
+	if sqlParts != "" {
+		sql += " AND " + sqlParts
+	}
+	if q.groupBy != "" {
+		sql += " GROUP BY " + q.groupBy
+	}
+	if q.orderBy != "" {
+		sql += " ORDER BY " + q.orderBy
+	}
+	return sql
+}
+
 func (q *QueryParamsOptions) Build() string {
 	sqlParts := []string{}
 	paramMap := make(map[string]any)
