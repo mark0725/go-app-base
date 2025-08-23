@@ -111,7 +111,38 @@ func GetSqlHelper(db string) ISqlHelper {
 	return g_DBHelpers[conn.Type]
 }
 
-func QueryParamsBuilder(params map[string]any, defaultPrefix string, otherPrefixes map[string][]string, spOps map[string]string) string {
+type QueryParamsOptions struct {
+	params        map[string]any
+	defaultPrefix string
+	otherPrefixes map[string][]string
+	spOps         map[string]string
+}
+
+func NewQueryParamsBuilder() *QueryParamsOptions {
+	return &QueryParamsOptions{
+		params:        make(map[string]any),
+		defaultPrefix: "",
+		otherPrefixes: make(map[string][]string),
+		spOps:         make(map[string]string),
+	}
+}
+func (q *QueryParamsOptions) DefaultPrefix(prefix string) *QueryParamsOptions {
+	q.defaultPrefix = prefix
+	return q
+}
+func (q *QueryParamsOptions) OtherPrefixes(otherPrefixes map[string][]string) *QueryParamsOptions {
+	q.otherPrefixes = otherPrefixes
+	return q
+}
+func (q *QueryParamsOptions) Params(params map[string]any) *QueryParamsOptions {
+	q.params = params
+	return q
+}
+func (q *QueryParamsOptions) SpOps(spOps map[string]string) *QueryParamsOptions {
+	q.spOps = spOps
+	return q
+}
+func (q *QueryParamsOptions) Build() string {
 	sqlParts := []string{}
 	paramMap := make(map[string]any)
 	//paramCount := make(map[string]int)
@@ -122,13 +153,13 @@ func QueryParamsBuilder(params map[string]any, defaultPrefix string, otherPrefix
 		return fmt.Sprintf("{%s}", key)
 	}
 
-	for k, val := range params {
+	for k, val := range q.params {
 		paraName := k
-		if defaultPrefix != "" {
-			paraName = defaultPrefix + "." + k
+		if q.defaultPrefix != "" {
+			paraName = q.defaultPrefix + "." + k
 		}
 
-		for p, fields := range otherPrefixes {
+		for p, fields := range q.otherPrefixes {
 			for _, f := range fields {
 				if f == k {
 					paraName = p + "." + k
@@ -138,8 +169,8 @@ func QueryParamsBuilder(params map[string]any, defaultPrefix string, otherPrefix
 		}
 
 		spOp := ""
-		if spOps != nil {
-			spOp = spOps[k]
+		if q.spOps != nil {
+			spOp = q.spOps[k]
 		}
 
 		buildLike := func(arr []any, single bool) string {
@@ -236,6 +267,10 @@ func QueryParamsBuilder(params map[string]any, defaultPrefix string, otherPrefix
 	}
 
 	return strings.Join(sqlParts, " and ")
+}
+
+func QueryParamsBuilder(params map[string]any, defaultPrefix string, otherPrefixes map[string][]string, spOps map[string]string) string {
+	return NewQueryParamsBuilder().Params(params).DefaultPrefix(defaultPrefix).OtherPrefixes(otherPrefixes).SpOps(spOps).Build()
 }
 
 func RegisterSqlHelper(dbType string, helper ISqlHelper) {
