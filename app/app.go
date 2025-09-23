@@ -71,7 +71,7 @@ func (app *Appliction) AppInit() error {
 
 	err := InitializeModules(app.AppConfig)
 	if err != nil {
-		logger.Errorf("initialize error: %v", err)
+		logger.Errorf("initialize error: %v\n", err)
 		return err
 	}
 

@@ -177,12 +177,15 @@ func InitializeModules(appConfig interface{}, opts ...AppModuleOption) error {
 		module := g_appModules[name]
 		moduleConfig := appConfig
 		if module.Options.config != nil {
-			loadModuleConfig(module.Options.config)
+			if err := loadModuleConfig(module.Options.config); err != nil {
+				return err
+			}
+			moduleConfig = module.Options.config
 		}
 
 		err := module.Module.Init(moduleConfig, module.Depends)
 		if err != nil {
-			return fmt.Errorf("failed to initialize module %s: %w", name, err)
+			return fmt.Errorf("failed to initialize module %s: %v", module.Name, err)
 		}
 		module.Ready = true
 	}
