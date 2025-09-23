@@ -31,10 +31,10 @@ func NewApplication(appConfig base_config.IAppConfig, options *ApplicationOption
 	}
 }
 
-func (app *Appliction) ConfigInit() {
+func ConfigInit(envPrefix string, configFile string, appConfig any) {
 	config, err := base_config.LoadConfig(
-		base_config.WithEnv(app.Options.envPrefix),
-		base_config.WithConfigfile(app.Options.configFile),
+		base_config.WithEnv(envPrefix),
+		base_config.WithConfigfile(configFile),
 	)
 	if err != nil {
 		logger.Error("Error loading config:", err)
@@ -52,19 +52,19 @@ func (app *Appliction) ConfigInit() {
 
 	logger.Tracef("app config json: %s\n", jsonData)
 
-	errjson := json.Unmarshal([]byte(jsonData), app.AppConfig)
+	errjson := json.Unmarshal([]byte(jsonData), appConfig)
 	if errjson != nil {
 		logger.Error("Error unmarshalling JSON:", err)
 		return
 	}
 
-	logger.Debugf("app config: %#v\n", app.AppConfig)
+	logger.Debugf("app config: %#v\n", appConfig)
 }
 
 func (app *Appliction) AppInit() error {
 	//base_log.SetLogLevel(base_log.LogLevelInfo)
 	logger.Info("App init ...")
-	app.ConfigInit()
+	ConfigInit(app.Options.envPrefix, app.Options.configFile, app.AppConfig)
 
 	logCfg := &app.AppConfig.GetAppConfig().Log
 	base_log.LoggerInit(logCfg)
