@@ -4,6 +4,8 @@ import (
 	"container/list"
 	"errors"
 	"fmt"
+
+	base_utils "github.com/mark0725/go-app-base/utils"
 )
 
 type IAppModule interface {
@@ -14,6 +16,7 @@ type AppModule struct {
 	Name    string
 	Module  IAppModule
 	Depends []string
+	Options AppModuleRegisterOptions
 	Ready   bool
 	//Done    chan Signal
 }
@@ -51,13 +54,33 @@ func GetModule(name string) (AppModule, bool) {
 	return *module, ok
 }
 
-func AppModuleRegister(name string, module IAppModule, depends []string) {
+type AppModuleRegisterOptions struct {
+	config any
+}
+type AppModuleRegisterOption func(*AppModuleRegisterOptions)
+
+func AppModuleRegisterOptionWithConfigType(config any) AppModuleRegisterOption {
+	return func(o *AppModuleRegisterOptions) {
+		o.config = config
+	}
+}
+
+func AppModuleRegister(name string, module IAppModule, depends []string, opts ...AppModuleRegisterOption) {
+	options := AppModuleRegisterOptions{}
+	for _, opt := range opts {
+		opt(&options)
+	}
 	g_appModules[name] = &AppModule{
 		Name:    name,
 		Module:  module,
 		Depends: depends,
+		Options: options,
 		//Done:    make(chan Signal),
 	}
+}
+
+func loadModuleConfig(config any) error {
+	return base_utils.MapToStruct(g_AppConfigOrig, config)
 }
 
 func InitializeModules(appConfig interface{}, opts ...AppModuleOption) error {
@@ -108,7 +131,7 @@ func InitializeModules(appConfig interface{}, opts ...AppModuleOption) error {
 			}
 		}
 	}
-	//fmt.Println("inDegree: ", inDegree)
+	//logger.Debug("inDegree: ", inDegree)
 	// 使用队列进行拓扑排序
 	queue := list.New()
 	for name, degree := range inDegree {
@@ -139,20 +162,25 @@ func InitializeModules(appConfig interface{}, opts ...AppModuleOption) error {
 			}
 		}
 
-		//fmt.Println("sortedModules: ", sortedModules)
+		//logger.Debug("sortedModules: ", sortedModules)
 	}
 
 	// 检查是否有环
 	if len(sortedModules) != len(initModulesMap) {
-		fmt.Println("sortedModules: ", sortedModules)
-		fmt.Println("appModules: ", initModulesMap)
+		logger.Debug("sortedModules: ", sortedModules)
+		logger.Debug("appModules: ", initModulesMap)
 		return errors.New("circular dependency detected")
 	}
 
 	// 按顺序初始化模块
 	for _, name := range sortedModules {
 		module := g_appModules[name]
-		err := module.Module.Init(appConfig, module.Depends)
+		moduleConfig := appConfig
+		if module.Options.config != nil {
+			loadModuleConfig(module.Options.config)
+		}
+
+		err := module.Module.Init(moduleConfig, module.Depends)
 		if err != nil {
 			return fmt.Errorf("failed to initialize module %s: %w", name, err)
 		}

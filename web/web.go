@@ -11,9 +11,24 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-var endPoints = map[string]func(group string, r *gin.RouterGroup){}
+type ServerConfigHandler func(name string, params map[string]any, c *gin.Engine)
 
-func EndPointRegister(module string, f func(group string, r *gin.RouterGroup)) {
+type EndPointMiddlewareHandler func(name string, params map[string]any, r *gin.RouterGroup)
+type EndPointHandler func(group string, r *gin.RouterGroup)
+
+var serverConfig = map[string]ServerConfigHandler{}
+var g_EndpointMiddewares = map[string]EndPointMiddlewareHandler{}
+var endPoints = map[string]EndPointHandler{}
+
+func ServerConfigRegister(module string, f ServerConfigHandler) {
+	serverConfig[module] = f
+}
+
+func EndpointMiddlewareRegister(module string, f EndPointMiddlewareHandler) {
+	g_EndpointMiddewares[module] = f
+}
+
+func EndPointRegister(module string, f EndPointHandler) {
 	endPoints[module] = f
 }
 
@@ -25,18 +40,18 @@ func StartWebServe(ctx context.Context, conf *WebConfig) error {
 			buf: bytes.NewBuffer([]byte{}),
 		}
 
-		if server.AccessLog != "" {
-			accessLogFile, err := os.OpenFile(server.AccessLog, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+		if server.Log.AccessLog != "" {
+			accessLogFile, err := os.OpenFile(server.Log.AccessLog, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 			if err != nil {
-				logger.Errorf("error opening access log file: %s error: %v", server.AccessLog, err)
+				logger.Errorf("error opening access log file: %s error: %v", server.Log.AccessLog, err)
 			}
 			writer.accessLog = accessLogFile
 		}
 
-		if server.ErrorLog != "" {
-			errorLogFile, err := os.OpenFile(server.ErrorLog, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+		if server.Log.ErrorLog != "" {
+			errorLogFile, err := os.OpenFile(server.Log.ErrorLog, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 			if err != nil {
-				logger.Errorf("error opening error log file: %s error: %v", server.ErrorLog, err)
+				logger.Errorf("error opening error log file: %s error: %v", server.Log.ErrorLog, err)
 			}
 			writer.errorLog = errorLogFile
 		}
@@ -52,18 +67,29 @@ func StartWebServe(ctx context.Context, conf *WebConfig) error {
 			router.LoadHTMLGlob(server.TemplateDir)
 		}
 
+		for _, conf := range server.Configs {
+			if h, ok := serverConfig[conf.Module]; ok {
+				h(conf.Name, conf.Params, router)
+			}
+		}
+
 		for _, pt := range server.Endpoints {
 			r := router.Group(pt.Path)
+			for _, middle := range pt.Middlewares {
+				if mh, ok := g_EndpointMiddewares[middle.Module]; ok {
+					mh(middle.Name, middle.Params, r)
+				}
+			}
 			endPoints[pt.Module](pt.Group, r)
 		}
 
-		router.NoRoute(func(c *gin.Context) {
-			if c.Request.URL.Path != "/" {
-				c.File("./static" + c.Request.URL.Path)
-			} else {
-				c.File("./static/index.html")
-			}
-		})
+		// router.NoRoute(func(c *gin.Context) {
+		// 	if c.Request.URL.Path != "/" {
+		// 		c.File("./static" + c.Request.URL.Path)
+		// 	} else {
+		// 		c.File("./static/index.html")
+		// 	}
+		// })
 
 		listenConfs, err := ParseListenConfig(server.Listen)
 		if err != nil {
