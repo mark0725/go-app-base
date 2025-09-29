@@ -22,3 +22,23 @@ type ListenKeepAliveConfig struct {
 	KeepIntvl int
 	KeepCnt   int
 }
+
+const CtxKeyAuthenticatedConsumer = "authenticated_consumer"
+
+type AuthenticatedConsumer struct {
+	Id       string `json:"id"`
+	Username string `json:"username"`
+	OrgId    string `json:"org_id"`
+}
+
+const CtxKeyAuthenticatedCredential = "authenticated_credential"
+
+type AuthenticatedCredential struct {
+	Id         string `json:"id"`
+	Identifier string `json:"identifier"`
+}
+
+const CtxKeyAuthenticatedGroups = "authenticated_groups"
+
+// authenticated_groups
+type AuthenticatedGroups []string
