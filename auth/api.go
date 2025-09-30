@@ -1,7 +1,7 @@
 package auth
 
 import (
-	"crypto/md5"
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"net/http"
@@ -60,7 +60,7 @@ func (obj *AuthApi) Login(c *gin.Context) {
 	userInfo := recs[0]
 
 	password := reqParams["password"].(string)
-	password_hash := md5.Sum([]byte(password))
+	password_hash := sha256.Sum256([]byte(password))
 	if userInfo.Passwd != hex.EncodeToString(password_hash[:]) {
 		c.JSON(http.StatusBadRequest, base_web.ApiReponse{Code: "USER_PASSWORD_FAULT", Message: "password error"})
 		return
