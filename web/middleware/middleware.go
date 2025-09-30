@@ -9,9 +9,11 @@ func init() {
 	base_web.EndpointMiddlewareRegister("base", BaseWebMiddleware)
 }
 
-func BaseWebMiddleware(name string, params map[string]any, r *gin.RouterGroup) {
+func BaseWebMiddleware(name string, params map[string]any, r gin.IRoutes) {
 	switch name {
 	//Authentication
+	case "authed":
+		r.Use(g_WebMiddlewareSecurity.Authed(params, r))
 	case "basic-auth":
 		r.Use(g_WebMiddlewareSecurity.BasicAuth(params, r))
 	case "key-auth":

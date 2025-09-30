@@ -29,14 +29,14 @@ func newJwtConfig(params map[string]any) *JwtConfig {
 
 	return &conf
 }
-func (m *WebMiddlewareSecurity) Jwt(params map[string]any, r *gin.RouterGroup) gin.HandlerFunc {
+func (m *WebMiddlewareSecurity) Jwt(params map[string]any, r gin.IRoutes) gin.HandlerFunc {
 	// conf := newKeyAuthConfig(params)
 
 	return func(c *gin.Context) {
 		if _, ok := c.Get(base_web.CtxKeyAuthenticatedConsumer); !ok {
 			authedConsumer := base_web.AuthenticatedConsumer{
 				Id:       "xilin.gao",
-				Username: "高西林",
+				Username: "user1",
 			}
 			c.Set(base_web.CtxKeyAuthenticatedConsumer, &authedConsumer)
 		}

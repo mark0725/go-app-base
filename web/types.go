@@ -23,6 +23,12 @@ type ListenKeepAliveConfig struct {
 	KeepCnt   int
 }
 
+type ApiReponse struct {
+	Code    string `json:"code"`
+	Message string `json:"message"`
+	Data    any    `json:"data,omitempty"`
+}
+
 const CtxKeyAuthenticatedConsumer = "authenticated_consumer"
 
 type AuthenticatedConsumer struct {

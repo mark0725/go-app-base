@@ -17,6 +17,9 @@ func ParseListenConfig(proxyListen string) ([]*ListenConfig, error) {
 		var config ListenConfig
 
 		parts := strings.Fields(configStr)
+		if len(parts) < 1 {
+			return nil, fmt.Errorf("invalid listen config: %s", configStr)
+		}
 		addrPort := strings.Split(parts[0], ":")
 
 		if len(addrPort) != 2 {

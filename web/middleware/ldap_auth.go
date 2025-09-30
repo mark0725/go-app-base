@@ -62,7 +62,7 @@ func (m *WebMiddlewareSecurity) LdapAuth(params map[string]any, r *gin.RouterGro
 		if _, ok := c.Get(base_web.CtxKeyAuthenticatedConsumer); !ok {
 			authedConsumer := base_web.AuthenticatedConsumer{
 				Id:       "xilin.gao",
-				Username: "高西林",
+				Username: "user1",
 			}
 			c.Set(base_web.CtxKeyAuthenticatedConsumer, &authedConsumer)
 		}

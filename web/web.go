@@ -13,7 +13,7 @@ import (
 
 type ServerConfigHandler func(name string, params map[string]any, c *gin.Engine)
 
-type EndPointMiddlewareHandler func(name string, params map[string]any, r *gin.RouterGroup)
+type EndPointMiddlewareHandler func(name string, params map[string]any, r gin.IRoutes)
 type EndPointHandler func(group string, r *gin.RouterGroup)
 
 var serverConfig = map[string]ServerConfigHandler{}
@@ -73,11 +73,19 @@ func StartWebServe(ctx context.Context, conf *WebConfig) error {
 			}
 		}
 
+		for _, conf := range server.Middlewares {
+			if h, ok := g_EndpointMiddewares[conf.Module]; ok {
+				h(conf.Name, conf.Params, router)
+			}
+		}
+
 		for _, pt := range server.Endpoints {
 			r := router.Group(pt.Path)
 			for _, middle := range pt.Middlewares {
 				if mh, ok := g_EndpointMiddewares[middle.Module]; ok {
 					mh(middle.Name, middle.Params, r)
+				} else {
+					logger.Errorf("EndpointMiddleware: %s %s not found", middle.Module, middle.Name)
 				}
 			}
 			endPoints[pt.Module](pt.Group, r)

@@ -2,6 +2,8 @@ package middleware
 
 import (
 	"encoding/json"
+	"fmt"
+	"net/http"
 
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-contrib/sessions/cookie"
@@ -48,7 +50,7 @@ func newSessionConfig(params map[string]any) *SessionConfig {
 		CookieName:              "session",
 		CookiePath:              "/",
 		CookieSameSite:          "Strict",
-		CookieSecure:            true,
+		CookieSecure:            false,
 		HashSubject:             false,
 		IdlingTimeout:           900,
 		LogoutMethods:           []string{"DELETE", "POST"},
@@ -69,12 +71,21 @@ func newSessionConfig(params map[string]any) *SessionConfig {
 	}
 
 	base_utils.MapToStruct(params, &conf)
+	fmt.Printf("SessionConfig: %+v\n", conf)
 
 	return &conf
 }
-func (m *WebMiddlewareSecurity) Session(params map[string]any, r *gin.RouterGroup) gin.HandlerFunc {
+func (m *WebMiddlewareSecurity) Session(params map[string]any, r gin.IRoutes) gin.HandlerFunc {
 	conf := newSessionConfig(params)
 	store := cookie.NewStore([]byte(conf.Secret))
+	store.Options(sessions.Options{
+		Path:     conf.CookiePath,
+		Domain:   conf.CookieDomain,
+		MaxAge:   conf.RollingTimeout,
+		HttpOnly: conf.CookieHTTPOnly,
+		Secure:   conf.CookieSecure,
+		SameSite: http.SameSiteLaxMode,
+	})
 	r.Use(sessions.Sessions(conf.CookieName, store))
 
 	return func(c *gin.Context) {
@@ -88,12 +99,18 @@ func (m *WebMiddlewareSecurity) Session(params map[string]any, r *gin.RouterGrou
 			}
 		}
 		c.Next()
-		if authedConsumer, ok := c.Get(base_web.CtxKeyAuthenticatedConsumer); ok {
-			if data, err := json.Marshal(authedConsumer); err == nil {
-				session.Set(base_web.CtxKeyAuthenticatedConsumer, data) // 设置 session
-				session.Save()
-			}
-		}
+		// if authedConsumer, ok := c.Get(base_web.CtxKeyAuthenticatedConsumer); ok {
+		// 	if data, err := json.Marshal(authedConsumer); err == nil {
+		// 		fmt.Println("authedConsumer:", string(data))
+		// 		c.SetCookie("authedConsumer", "jack", 3600, "/", "", false, true)
 
+		// 		session.Set(base_web.CtxKeyAuthenticatedConsumer, string(data)) // 设置 session
+		// 		if err := session.Save(); err != nil {
+		// 			fmt.Println("session save", "error", err)
+		// 		}
+		// 	} else {
+		// 		slog.Error("session parse", "error", err)
+		// 	}
+		// }
 	}
 }

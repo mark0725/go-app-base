@@ -44,11 +44,13 @@ func DeepMerge(maps ...map[string]any) map[string]any {
 	return result
 }
 
-func MapToStruct(m map[string]any, s any) error {
-	v := reflect.ValueOf(s).Elem()
+func MapToStruct2(m map[string]any, s any) error {
+	v := reflect.ValueOf(s)
+	if v.Kind() != reflect.Ptr || v.IsNil() {
+		return fmt.Errorf("s must be a non-nil pointer to struct")
+	}
+	v = v.Elem()
 	t := v.Type()
-
-	// Check if s is a pointer to a struct.
 	if t.Kind() != reflect.Struct {
 		return fmt.Errorf("s must be a pointer to a struct")
 	}
@@ -56,94 +58,377 @@ func MapToStruct(m map[string]any, s any) error {
 	for i := 0; i < t.NumField(); i++ {
 		field := t.Field(i)
 		tag := field.Tag.Get("json")
-		tagOptions := strings.Split(tag, ",")
-
-		// Determine the key in the map.
-		key := tagOptions[0]
+		tagOpts := strings.Split(tag, ",")
+		key := tagOpts[0]
 		if key == "" {
-			key = field.Name // Fallback to field name if no tag is present.
+			key = field.Name
 		}
 
-		// Set the struct field if the key exists in the map.
-		if val, ok := m[key]; ok {
-			fieldValue := v.Field(i)
-			if val == nil {
-				continue
+		val, ok := m[key]
+		if !ok || val == nil {
+			continue
+		}
+
+		dst := v.Field(i)
+		if !dst.CanSet() {
+			continue
+		}
+
+		src := reflect.ValueOf(val)
+
+		switch dst.Kind() {
+
+		case reflect.Ptr:
+			if src.Kind() == reflect.Map && dst.Type().Elem().Kind() == reflect.Struct {
+				ptr := reflect.New(dst.Type().Elem())
+				if err := MapToStruct(src.Interface().(map[string]any), ptr.Interface()); err != nil {
+					return err
+				}
+				dst.Set(ptr)
+			} else if src.Type().ConvertibleTo(dst.Type().Elem()) {
+				ptr := reflect.New(dst.Type().Elem())
+				ptr.Elem().Set(src.Convert(dst.Type().Elem()))
+				dst.Set(ptr)
+			} else {
+				return fmt.Errorf("cannot convert value for field %s", field.Name)
 			}
 
-			if !fieldValue.CanSet() {
-				continue
+		case reflect.Struct:
+			if src.Kind() != reflect.Map {
+				return fmt.Errorf("expected map for nested field %s", field.Name)
+			}
+			if err := MapToStruct(src.Interface().(map[string]any), dst.Addr().Interface()); err != nil {
+				return err
 			}
 
-			val := reflect.ValueOf(val)
+		case reflect.Slice, reflect.Array:
+			if src.Kind() != reflect.Slice && src.Kind() != reflect.Array {
+				return fmt.Errorf("expected slice/array for field %s", field.Name)
+			}
+			elemTyp := dst.Type().Elem()
+			n := src.Len()
 
-			// Handle different field types.
-			switch fieldValue.Kind() {
-			case reflect.Ptr:
-				if val.Kind() == reflect.Map && fieldValue.Type().Elem().Kind() == reflect.Struct {
-					ptr := reflect.New(fieldValue.Type().Elem())
-					err := MapToStruct(val.Interface().(map[string]any), ptr.Interface())
-					if err != nil {
-						return err
-					}
-					fieldValue.Set(ptr)
-				} else if val.Type().ConvertibleTo(fieldValue.Type().Elem()) {
-					fieldValue.Set(reflect.New(fieldValue.Type().Elem()))
-					fieldValue.Elem().Set(val.Convert(fieldValue.Type().Elem()))
-				} else {
-					return fmt.Errorf("cannot convert value for field %s", field.Name)
-				}
-
-			case reflect.Struct:
-				if val.Kind() == reflect.Map {
-					err := MapToStruct(val.Interface().(map[string]any), fieldValue.Addr().Interface())
-					if err != nil {
-						return err
-					}
-				} else {
-					return fmt.Errorf("expected map for nested field %s", field.Name)
-				}
-
+			switch dst.Kind() {
 			case reflect.Slice:
-				if val.Kind() != reflect.Slice {
-					continue
-					//return fmt.Errorf("expected slice for field %s type %s", field.Name, val.Kind())
+				out := reflect.MakeSlice(dst.Type(), n, n)
+				if err := fillSequential(out, src, elemTyp, field.Name); err != nil {
+					return err
 				}
-				slice := reflect.MakeSlice(fieldValue.Type(), val.Len(), val.Len())
-				for j := 0; j < val.Len(); j++ {
-					elem := slice.Index(j)
+				dst.Set(out)
 
-					if elem.Kind() == reflect.Ptr {
-						elem = reflect.New(fieldValue.Type().Elem().Elem())
-						slice.Index(j).Set(elem)
-						elem = elem.Elem()
-					}
-
-					if elem.Kind() == reflect.Struct && val.Index(j).Kind() == reflect.Map {
-						err := MapToStruct(val.Index(j).Interface().(map[string]any), elem.Addr().Interface())
-						if err != nil {
-							return err
-						}
-					} else if val.Index(j).Type().ConvertibleTo(elem.Type()) {
-						elem.Set(val.Index(j).Convert(elem.Type()))
-					} else {
-						break
-						//return fmt.Errorf("cannot convert slice value for field %s", field.Name)
-					}
+			case reflect.Array:
+				// 数组长度固定，超出部分截断，缺失部分保持零值
+				out := reflect.New(dst.Type()).Elem()
+				if err := fillSequential(out, src, elemTyp, field.Name); err != nil {
+					return err
 				}
-				fieldValue.Set(slice)
+				dst.Set(out)
+			}
 
-			default:
-				if val.Type().ConvertibleTo(fieldValue.Type()) {
-					fieldValue.Set(val.Convert(fieldValue.Type()))
-				} else {
-					continue
-					//return fmt.Errorf("cannot convert value for field %s", field.Name)
-				}
+		default: // 基础类型
+			if src.Type().ConvertibleTo(dst.Type()) {
+				dst.Set(src.Convert(dst.Type()))
 			}
 		}
 	}
 	return nil
+}
+func MapToStruct(m map[string]any, s any) error {
+	rv := reflect.ValueOf(s)
+	if rv.Kind() != reflect.Ptr || rv.Elem().Kind() != reflect.Struct {
+		return fmt.Errorf("s must be a pointer to a struct")
+	}
+
+	v := rv.Elem()
+	t := v.Type()
+
+	for i := 0; i < t.NumField(); i++ {
+		sf := t.Field(i)
+		fieldVal := v.Field(i)
+		if !fieldVal.CanSet() {
+			continue
+		}
+
+		tag := sf.Tag.Get("json")
+		name := strings.Split(tag, ",")[0]
+		if name == "" {
+			name = sf.Name
+		}
+		raw, ok := m[name]
+		if !ok || raw == nil {
+			continue
+		}
+
+		srcVal := reflect.ValueOf(raw)
+
+		//------------------------------------------------------------------
+		// 指针
+		//------------------------------------------------------------------
+		switch fieldVal.Kind() {
+
+		case reflect.Ptr:
+			elemTyp := fieldVal.Type().Elem()
+			if srcVal.Kind() == reflect.Map && elemTyp.Kind() == reflect.Struct {
+				ptr := reflect.New(elemTyp)
+				if err := MapToStruct(srcVal.Interface().(map[string]any), ptr.Interface()); err != nil {
+					return err
+				}
+				fieldVal.Set(ptr)
+				continue
+			}
+			if srcVal.Type().ConvertibleTo(elemTyp) {
+				ptr := reflect.New(elemTyp)
+				ptr.Elem().Set(srcVal.Convert(elemTyp))
+				fieldVal.Set(ptr)
+				continue
+			}
+			return fmt.Errorf("cannot convert %v to %v (field %s)",
+				srcVal.Type(), elemTyp, sf.Name)
+
+		//------------------------------------------------------------------
+		// 结构体
+		//------------------------------------------------------------------
+		case reflect.Struct:
+			if srcVal.Kind() != reflect.Map {
+				return fmt.Errorf("expected map for nested field %s", sf.Name)
+			}
+			if err := MapToStruct(srcVal.Interface().(map[string]any), fieldVal.Addr().Interface()); err != nil {
+				return err
+			}
+
+		//------------------------------------------------------------------
+		// 切片
+		//------------------------------------------------------------------
+		case reflect.Slice:
+			if srcVal.Kind() != reflect.Slice {
+				return fmt.Errorf("expected slice for field %s", sf.Name)
+			}
+
+			l := srcVal.Len()
+			dstSlice := reflect.MakeSlice(fieldVal.Type(), l, l)
+			elemTyp := fieldVal.Type().Elem()
+
+			for j := 0; j < l; j++ {
+				srcElem := srcVal.Index(j)
+
+				// 关键修复：把 interface{} 外壳全部剥掉
+				for srcElem.Kind() == reflect.Interface {
+					srcElem = srcElem.Elem()
+				}
+
+				dstElem := dstSlice.Index(j)
+
+				if elemTyp.Kind() == reflect.Ptr {
+					dstElem.Set(reflect.New(elemTyp.Elem()))
+					dstElem = dstElem.Elem()
+				}
+
+				if dstElem.Kind() == reflect.Struct && srcElem.Kind() == reflect.Map {
+					if err := MapToStruct(srcElem.Interface().(map[string]any), dstElem.Addr().Interface()); err != nil {
+						return err
+					}
+					continue
+				}
+
+				if srcElem.Type().ConvertibleTo(dstElem.Type()) {
+					dstElem.Set(srcElem.Convert(dstElem.Type()))
+					continue
+				}
+				return fmt.Errorf("cannot convert slice elem for field %s", sf.Name)
+			}
+			fieldVal.Set(dstSlice)
+
+		//------------------------------------------------------------------
+		// 固定数组
+		//------------------------------------------------------------------
+		case reflect.Array:
+			if srcVal.Kind() != reflect.Slice && srcVal.Kind() != reflect.Array {
+				return fmt.Errorf("expected array/slice for field %s", sf.Name)
+			}
+			l := srcVal.Len()
+			if l > fieldVal.Len() {
+				l = fieldVal.Len()
+			}
+			for j := 0; j < l; j++ {
+				srcElem := srcVal.Index(j)
+				// 同样剥掉 interface 包装
+				for srcElem.Kind() == reflect.Interface {
+					srcElem = srcElem.Elem()
+				}
+				dstElem := fieldVal.Index(j)
+
+				if dstElem.Kind() == reflect.Struct && srcElem.Kind() == reflect.Map {
+					if err := MapToStruct(srcElem.Interface().(map[string]any), dstElem.Addr().Interface()); err != nil {
+						return err
+					}
+					continue
+				}
+				if srcElem.Type().ConvertibleTo(dstElem.Type()) {
+					dstElem.Set(srcElem.Convert(dstElem.Type()))
+					continue
+				}
+				return fmt.Errorf("cannot convert array elem for field %s", sf.Name)
+			}
+		case reflect.Map:
+			if srcVal.Kind() != reflect.Map {
+				return fmt.Errorf("expected map for field %s", sf.Name)
+			}
+
+			dstMap := reflect.MakeMap(fieldVal.Type())
+			keyTyp := fieldVal.Type().Key()
+			valTyp := fieldVal.Type().Elem()
+
+			for _, k := range srcVal.MapKeys() {
+				srcElem := srcVal.MapIndex(k)
+				for srcElem.Kind() == reflect.Interface {
+					srcElem = srcElem.Elem()
+				}
+
+				if !k.Type().ConvertibleTo(keyTyp) {
+					return fmt.Errorf("cannot convert map key %v to %v (field %s)",
+						k.Type(), keyTyp, sf.Name)
+				}
+				dstKey := k.Convert(keyTyp)
+
+				var dstVal reflect.Value
+
+				switch {
+				// value 是结构体 --------------------------------------------------
+				case valTyp.Kind() == reflect.Struct && srcElem.Kind() == reflect.Map:
+					dstVal = reflect.New(valTyp).Elem()
+					if err := MapToStruct(srcElem.Interface().(map[string]any),
+						dstVal.Addr().Interface()); err != nil {
+						return err
+					}
+
+				// value 是 *结构体 ------------------------------------------------
+				case valTyp.Kind() == reflect.Ptr &&
+					valTyp.Elem().Kind() == reflect.Struct &&
+					srcElem.Kind() == reflect.Map:
+
+					dstVal = reflect.New(valTyp.Elem())
+					if err := MapToStruct(srcElem.Interface().(map[string]any),
+						dstVal.Interface()); err != nil {
+						return err
+					}
+
+				// value 还是 Map，递归处理 ---------------------------------------
+				case valTyp.Kind() == reflect.Map && srcElem.Kind() == reflect.Map:
+					// 这里是关键修复
+					nestedMap := reflect.MakeMap(valTyp)
+					// 复用当前函数实现递归复制
+					if err := copyMap(srcElem, nestedMap, sf.Name); err != nil {
+						return err
+					}
+					dstVal = nestedMap
+
+				// 其它可直接转换 --------------------------------------------------
+				default:
+					if !srcElem.Type().ConvertibleTo(valTyp) {
+						return fmt.Errorf("cannot convert map value %v to %v (field %s)",
+							srcElem.Type(), valTyp, sf.Name)
+					}
+					dstVal = srcElem.Convert(valTyp)
+				}
+
+				dstMap.SetMapIndex(dstKey, dstVal)
+			}
+
+			fieldVal.Set(dstMap)
+		default:
+			if srcVal.Type().ConvertibleTo(fieldVal.Type()) {
+				fieldVal.Set(srcVal.Convert(fieldVal.Type()))
+			} else {
+				return fmt.Errorf("cannot convert %v to %v (field %s)",
+					srcVal.Type(), fieldVal.Type(), sf.Name)
+			}
+		}
+	}
+	return nil
+}
+
+func copyMap(src, dst reflect.Value, fld string) error {
+	keyTyp := dst.Type().Key()
+	valTyp := dst.Type().Elem()
+
+	for _, k := range src.MapKeys() {
+		v := src.MapIndex(k)
+		for v.Kind() == reflect.Interface {
+			v = v.Elem()
+		}
+
+		if !k.Type().ConvertibleTo(keyTyp) {
+			return fmt.Errorf("cannot convert map key %v to %v (field %s)",
+				k.Type(), keyTyp, fld)
+		}
+		dstKey := k.Convert(keyTyp)
+
+		var dstVal reflect.Value
+		switch {
+		case valTyp.Kind() == reflect.Map && v.Kind() == reflect.Map:
+			nested := reflect.MakeMap(valTyp)
+			if err := copyMap(v, nested, fld); err != nil {
+				return err
+			}
+			dstVal = nested
+
+		case valTyp.Kind() == reflect.Struct && v.Kind() == reflect.Map:
+			dstVal = reflect.New(valTyp).Elem()
+			if err := MapToStruct(v.Interface().(map[string]any),
+				dstVal.Addr().Interface()); err != nil {
+				return err
+			}
+
+		default:
+			if !v.Type().ConvertibleTo(valTyp) {
+				return fmt.Errorf("cannot convert map value %v to %v (field %s)",
+					v.Type(), valTyp, fld)
+			}
+			dstVal = v.Convert(valTyp)
+		}
+		dst.SetMapIndex(dstKey, dstVal)
+	}
+	return nil
+}
+
+// fillSequential 将 src 中的元素依次写入 out，支持元素为结构体或基础类型。
+// out 可以是 slice 也可以是 array。
+func fillSequential(out, src reflect.Value, elemTyp reflect.Type, fieldName string) error {
+	limit := min(out.Len(), src.Len())
+	for j := 0; j < limit; j++ {
+		dstElem := out.Index(j)
+		srcElem := src.Index(j)
+
+		// 如果目标是 *T，需要先创建指针
+		if dstElem.Kind() == reflect.Ptr {
+			ptr := reflect.New(elemTyp.Elem())
+			dstElem.Set(ptr)
+			dstElem = ptr.Elem()
+		}
+
+		switch dstElem.Kind() {
+		case reflect.Struct:
+			if srcElem.Kind() != reflect.Map {
+				return fmt.Errorf("expected map in %s[%d]", fieldName, j)
+			}
+			if err := MapToStruct(srcElem.Interface().(map[string]any), dstElem.Addr().Interface()); err != nil {
+				return err
+			}
+		default:
+			if !srcElem.Type().ConvertibleTo(dstElem.Type()) {
+				return fmt.Errorf("cannot convert %s[%d]", fieldName, j)
+			}
+			dstElem.Set(srcElem.Convert(dstElem.Type()))
+		}
+	}
+	return nil
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
 func StructToMap(obj any) map[string]any {
 	result := make(map[string]any)

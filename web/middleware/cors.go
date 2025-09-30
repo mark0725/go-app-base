@@ -28,7 +28,7 @@ func newCORSConfig(params map[string]any) *CORSConfig {
 	return &conf
 }
 
-func (m *WebMiddlewareSecurity) CORS(params map[string]any, r *gin.RouterGroup) gin.HandlerFunc {
+func (m *WebMiddlewareSecurity) CORS(params map[string]any, r gin.IRoutes) gin.HandlerFunc {
 	conf := newCORSConfig(params)
 
 	return func(c *gin.Context) {
