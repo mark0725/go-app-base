@@ -88,7 +88,13 @@ func StartWebServe(ctx context.Context, conf *WebConfig) error {
 					logger.Errorf("EndpointMiddleware: %s %s not found", middle.Module, middle.Name)
 				}
 			}
-			endPoints[pt.Module](pt.Group, r)
+
+			if eph, ok := endPoints[pt.Module]; ok {
+				eph(pt.Group, r)
+			} else {
+				logger.Errorf("EndpointHandler: %s not found", pt.Module)
+			}
+
 		}
 
 		// router.NoRoute(func(c *gin.Context) {

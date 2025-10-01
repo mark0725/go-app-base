@@ -2,7 +2,6 @@ package middleware
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
 
 	"github.com/gin-contrib/sessions"
@@ -71,7 +70,6 @@ func newSessionConfig(params map[string]any) *SessionConfig {
 	}
 
 	base_utils.MapToStruct(params, &conf)
-	fmt.Printf("SessionConfig: %+v\n", conf)
 
 	return &conf
 }
