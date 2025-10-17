@@ -32,9 +32,10 @@ type ApiReponse struct {
 const CtxKeyAuthenticatedConsumer = "authenticated_consumer"
 
 type AuthenticatedConsumer struct {
-	Id       string `json:"id"`
-	Username string `json:"username"`
-	OrgId    string `json:"org_id"`
+	Id           string `json:"id"`
+	Username     string `json:"username"`
+	OrgId        string `json:"org_id"`
+	ConsumerType string `json:"consumer_type"`
 }
 
 const CtxKeyAuthenticatedCredential = "authenticated_credential"
@@ -42,6 +43,10 @@ const CtxKeyAuthenticatedCredential = "authenticated_credential"
 type AuthenticatedCredential struct {
 	Id         string `json:"id"`
 	Identifier string `json:"identifier"`
+	Name       string `json:"name"`
+	Type       string `json:"type"`
+	ObjectId   string `json:"object_id"`
+	ObjectType string `json:"object_type"`
 }
 
 const CtxKeyAuthenticatedGroups = "authenticated_groups"

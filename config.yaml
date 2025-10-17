@@ -37,8 +37,6 @@ web:
   servers:
     - name: "public"
       listen: "0.0.0.0:9988"
-      ssl_cert: "{{.vars.app.app_home}}/ssl/server.crt"
-      ssl_cert_key: "{{.vars.app.app_home}}/ssl/server.key"
       static_dir: "{{.vars.app.app_home}}/static"
       error_log: "{{.vars.app.app_home}}/logs/http_error.log"
       access_log: "{{.vars.app.app_home}}/logs/http_access.log"

@@ -67,9 +67,10 @@ func (obj *AuthApi) Login(c *gin.Context) {
 	}
 
 	authedConsumer := base_web.AuthenticatedConsumer{
-		Id:       userInfo.UserId,
-		Username: userInfo.UserName,
-		OrgId:    userInfo.OrgId,
+		Id:           userInfo.UserId,
+		Username:     userInfo.UserName,
+		OrgId:        userInfo.OrgId,
+		ConsumerType: "user",
 	}
 	c.Set(base_web.CtxKeyAuthenticatedConsumer, &authedConsumer)
 	session := sessions.Default(c)
