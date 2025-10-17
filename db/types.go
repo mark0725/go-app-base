@@ -6,14 +6,15 @@ type SqlBuildResult struct {
 }
 
 type DatabaseConfig struct {
-	Type    string `json:"type"`
-	DBName  string `json:"dbname"`
-	DBPass  string `json:"dbpass"`
-	DBUser  string `json:"dbuser"`
-	Host    string `json:"host"`
-	Port    int    `json:"port"`
-	Driver  string `json:"driver"`
-	Options string `json:"options"`
+	Type    string `json:"type,omitempty"`
+	Dsn     string `json:"dsn,omitempty"`
+	DBName  string `json:"dbname,omitempty"`
+	DBPass  string `json:"dbpass,omitempty"`
+	DBUser  string `json:"dbuser,omitempty"`
+	Host    string `json:"host,omitempty"`
+	Port    int    `json:"port,omitempty"`
+	Driver  string `json:"driver,omitempty"`
+	Options string `json:"options,omitempty"`
 }
 
 type PageQueryResult struct {

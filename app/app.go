@@ -15,17 +15,17 @@ func GetAppConfigOrig() map[string]any {
 	return g_AppConfigOrig
 }
 
-type Appliction struct {
+type Application struct {
 	AppConfig base_config.IAppConfig
 	Options   *ApplicationOptions
 }
 
-func NewApplication(appConfig base_config.IAppConfig, options *ApplicationOptions) *Appliction {
+func NewApplication(appConfig base_config.IAppConfig, options *ApplicationOptions) *Application {
 	if options == nil {
 		options = NewApplicationOptions()
 	}
 
-	return &Appliction{
+	return &Application{
 		Options:   options,
 		AppConfig: appConfig,
 	}
@@ -61,7 +61,7 @@ func ConfigInit(envPrefix string, configFile string, appConfig any) {
 	logger.Debugf("app config: %#v\n", appConfig)
 }
 
-func (app *Appliction) AppInit() error {
+func (app *Application) AppInit() error {
 	//base_log.SetLogLevel(base_log.LogLevelInfo)
 	logger.Info("App init ...")
 	ConfigInit(app.Options.envPrefix, app.Options.configFile, app.AppConfig)
@@ -79,7 +79,7 @@ func (app *Appliction) AppInit() error {
 	return nil
 }
 
-func (app *Appliction) Run(ctx context.Context) error {
+func (app *Application) Run(ctx context.Context) error {
 	// ctx := context.Background()
 	// defer ctx.Done()
 	logger.Info("App starting ...")
