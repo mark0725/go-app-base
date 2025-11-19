@@ -259,7 +259,7 @@ func (q *QueryParamsOptions) Build() (string, map[string]any) {
 		sql += q.sql
 	}
 
-	sqlParts, sqlParams := q.BuildSqlPart()
+	sqlParts, sqlPartParams := q.BuildSqlPart()
 	if sqlParts != "" {
 		sql += " and (" + sqlParts + ")"
 	}
@@ -268,6 +268,9 @@ func (q *QueryParamsOptions) Build() (string, map[string]any) {
 	}
 	if q.orderBy != "" {
 		sql += " order by " + q.orderBy
+	}
+	for k, v := range sqlPartParams {
+		sqlParams[k] = v
 	}
 	return sql, sqlParams
 }
