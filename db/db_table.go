@@ -90,28 +90,76 @@ func GetTableFieldIds(s interface{}) ([]string, error) {
 	return fields, nil
 }
 
-func MapRowToStruct(data map[string]interface{}, result interface{}) error {
-	// 解析 result 的值和类型
-	val := reflect.ValueOf(result).Elem()
+func MapRowToStruct(data map[string]any, result any) error {
+	val := reflect.ValueOf(result)
+	if val.Kind() == reflect.Ptr {
+		val = val.Elem()
+	}
+	return mapRowToStructValue(data, val)
+}
+
+func mapRowToStructValue(data map[string]any, val reflect.Value) error {
+	if val.Kind() != reflect.Struct {
+		return nil
+	}
+
 	typ := val.Type()
-
 	for i := 0; i < val.NumField(); i++ {
-		// 获取字段的 structfield 和对应的 json tag
 		field := typ.Field(i)
-		tag := field.Tag.Get("field-id")
+		fieldVal := val.Field(i)
 
+		// 处理内嵌 struct（匿名字段）
+		if field.Anonymous {
+			// 如果是指针类型的内嵌 struct
+			if fieldVal.Kind() == reflect.Ptr {
+				if fieldVal.IsNil() {
+					// 初始化 nil 指针
+					fieldVal.Set(reflect.New(fieldVal.Type().Elem()))
+				}
+				fieldVal = fieldVal.Elem()
+			}
+			// 递归处理内嵌 struct
+			if err := mapRowToStructValue(data, fieldVal); err != nil {
+				return err
+			}
+			continue
+		}
+
+		// 处理普通的嵌套 struct 字段（非匿名）
+		if fieldVal.Kind() == reflect.Struct {
+			if err := mapRowToStructValue(data, fieldVal); err != nil {
+				return err
+			}
+			continue
+		}
+
+		// 处理指针类型的嵌套 struct
+		if fieldVal.Kind() == reflect.Ptr && fieldVal.Type().Elem().Kind() == reflect.Struct {
+			if fieldVal.IsNil() {
+				fieldVal.Set(reflect.New(fieldVal.Type().Elem()))
+			}
+			if err := mapRowToStructValue(data, fieldVal.Elem()); err != nil {
+				return err
+			}
+			continue
+		}
+
+		// 处理普通字段
+		tag := field.Tag.Get("field-id")
 		if tag != "" {
-			// 查找 map 中对应的 key
 			if value, ok := data[tag]; ok && value != nil {
-				// 设置值
-				fieldVal := val.Field(i)
 				if fieldVal.CanSet() {
-					fieldVal.Set(reflect.ValueOf(value))
+					// 类型转换处理
+					dataVal := reflect.ValueOf(value)
+					if dataVal.Type().AssignableTo(fieldVal.Type()) {
+						fieldVal.Set(dataVal)
+					} else if dataVal.Type().ConvertibleTo(fieldVal.Type()) {
+						fieldVal.Set(dataVal.Convert(fieldVal.Type()))
+					}
 				}
 			}
 		}
 	}
-
 	return nil
 }
 

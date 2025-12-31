@@ -383,6 +383,7 @@ func DBType2GoType(db string, dbType string) (string, error) {
 type DBQueryOptions struct {
 	// db     string
 	table  string
+	from   string
 	fields []string
 	limit  int
 	offset int
@@ -402,6 +403,11 @@ func NewDBQueryOptions() *DBQueryOptions {
 
 func (options *DBQueryOptions) Table(table string) *DBQueryOptions {
 	options.table = table
+	return options
+}
+
+func (options *DBQueryOptions) From(from string) *DBQueryOptions {
+	options.from = from
 	return options
 }
 
@@ -441,7 +447,12 @@ func (options *DBQueryOptions) Build() string {
 		fields = options.fields
 	}
 
-	sql := fmt.Sprintf("SELECT %s FROM %s", strings.Join(fields, ","), options.table)
+	sfrom := options.table
+	if options.from != "" {
+		sfrom = options.from
+	}
+
+	sql := fmt.Sprintf("SELECT %s FROM %s", strings.Join(fields, ","), sfrom)
 	if options != nil {
 		if options.wheres != "" {
 			sql = sql + " where " + options.wheres
@@ -474,6 +485,36 @@ func DBQueryEnt2[T any](db string, table string, options *DBQueryOptions) ([]*T,
 
 	sqlOld := options.Table(table).Fields(fields).Build()
 
+	sqlResult := QueryNamedParamsBuilder(sqlOld, options.params)
+	logger.Trace("query sql:", sqlResult.Sql)
+	logger.Trace("query params:", sqlResult.Params)
+
+	result, err := DBQuery(db, sqlResult.Sql, sqlResult.Params)
+	if err != nil {
+		logger.Error("DBQuery fail: ", err)
+		return nil, err
+	}
+
+	if len(result) == 0 {
+		logger.Trace("DBQuery notfound: ")
+		return nil, nil
+	}
+
+	rows := utils.Map(result, func(row map[string]any) *T {
+		var rec T
+		if err := MapRowToStruct(row, &rec); err != nil {
+			logger.Error("MapRowToStruct fail: ", err)
+			return nil
+		}
+
+		return &rec
+	})
+
+	return rows, nil
+}
+
+func DBQueryG[T any](db string, options *DBQueryOptions) ([]*T, error) {
+	sqlOld := options.Build()
 	sqlResult := QueryNamedParamsBuilder(sqlOld, options.params)
 	logger.Trace("query sql:", sqlResult.Sql)
 	logger.Trace("query params:", sqlResult.Params)
